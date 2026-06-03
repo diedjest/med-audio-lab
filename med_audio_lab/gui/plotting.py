@@ -331,6 +331,7 @@ class CanvasPlot(ttk.Frame):
         log_freq: bool = False,
         target_hz_line: float | None = None,
         freq_ylim: tuple[float, float] | None = None,
+        morlet_ridge_line: bool = False,
         colorbar_label: str | None = None,
         note: str = "",
     ) -> None:
@@ -347,7 +348,7 @@ class CanvasPlot(ttk.Frame):
             return
 
         morlet_display = spec_kind == "Morlet CWT"
-        if morlet_display:
+        if morlet_display and morlet_ridge_line:
             m = _morlet_ridge_line_collection(
                 self.ax, t, freqs_hz, spec, tone_hz=target_hz_line, linewidth=0.75
             )

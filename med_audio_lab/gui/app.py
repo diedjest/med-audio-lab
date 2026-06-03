@@ -979,11 +979,22 @@ class MedAudioLabApp(tk.Tk):
             messagebox.showerror("Morlet CWT", str(exc))
             self.status.set(str(exc))
             return
-        tone_hz = self._morlet_tone_hz()
-        if tone_hz is None and self.current_data.size:
+        ridge_line = (
+            self.current_data.size > 0
+            and analysis.should_use_morlet_ridge_line(
+                self.current_data, self.current_samplerate
+            )
+        )
+        tone_hz = None
+        if ridge_line:
             tone_hz = analysis.estimate_dominant_tone_hz(
                 self.current_data, self.current_samplerate
             )
+            if tone_hz is not None:
+                self.record_tone_hz = tone_hz
+                self.morlet_target_var.set(
+                    str(int(tone_hz)) if abs(tone_hz - round(tone_hz)) < 1.0 else f"{tone_hz:.1f}"
+                )
         self.analysis_plot.draw_interactive_spec(
             t,
             freqs_disp,
@@ -993,7 +1004,8 @@ class MedAudioLabApp(tk.Tk):
             Wx=Wx_disp,
             spec_kind="Morlet CWT",
             log_freq=True,
-            target_hz_line=tone_hz,
+            morlet_ridge_line=ridge_line,
+            target_hz_line=tone_hz if ridge_line else self._morlet_tone_hz(),
             freq_ylim=freq_ylim,
             colorbar_label="Амплитуда",
             note="ЛКМ — боковой срез, ПКМ — продольный\nМожно затем STFT / «Срез вейвлета»",

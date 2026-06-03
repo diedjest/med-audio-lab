@@ -156,6 +156,66 @@ def resolve_record_tone_hz(
     return estimate_dominant_tone_hz(data, samplerate)
 
 
+def is_narrowband_constant_tone(
+    data: np.ndarray,
+    samplerate: int,
+    *,
+    energy_ratio_min: float = 0.42,
+    bandwidth_frac: float = 0.18,
+) -> bool:
+    """Узкополосный тон: большая часть энергии в узкой полосе спектра."""
+    x = as_mono(data)
+    if x.size < 64:
+        return False
+    freqs, mag = fft_spectrum_from_signal(x, int(samplerate))
+    power = np.square(mag, dtype=np.float64)
+    total = float(power.sum())
+    if total <= EPS:
+        return False
+    i = int(np.argmax(power))
+    peak_f = float(freqs[i])
+    if peak_f <= 0:
+        return False
+    band = (freqs >= peak_f * (1.0 - bandwidth_frac)) & (freqs <= peak_f * (1.0 + bandwidth_frac))
+    if not np.any(band):
+        return False
+    return float(power[band].sum()) / total >= energy_ratio_min
+
+
+def is_steady_tone(
+    data: np.ndarray,
+    samplerate: int,
+    *,
+    segments: int = 6,
+    max_freq_jitter: float = 0.06,
+) -> bool:
+    """Частота тона почти не меняется по длине записи."""
+    x = as_mono(data)
+    if x.size < 128:
+        return True
+    n = int(segments)
+    chunk = max(64, x.size // n)
+    peaks: list[float] = []
+    for k in range(n):
+        seg = x[k * chunk: (k + 1) * chunk if k < n - 1 else x.size]
+        if seg.size < 32:
+            continue
+        f = estimate_dominant_tone_hz(seg, samplerate)
+        if f is not None and f > 0:
+            peaks.append(f)
+    if len(peaks) < 2:
+        return True
+    mean_f = float(np.mean(peaks))
+    if mean_f <= 0:
+        return False
+    return float(np.std(peaks)) / mean_f <= max_freq_jitter
+
+
+def should_use_morlet_ridge_line(data: np.ndarray, samplerate: int) -> bool:
+    """Прямая линия на CWT только для ровного узкополосного сигнала."""
+    return is_narrowband_constant_tone(data, samplerate) and is_steady_tone(data, samplerate)
+
+
 def stft_spectrogram(
     data: np.ndarray,
     samplerate: int,
