@@ -212,7 +212,7 @@ class MedAudioLabApp(tk.Tk):
         baud_row = ttk.Frame(serial_box)
         baud_row.pack(fill="x", pady=(8, 0))
         ttk.Label(baud_row, text="Скорость").pack(side="left")
-        self.baud_var = tk.StringVar(value="115200")
+        self.baud_var = tk.StringVar(value="921600")
         ttk.Combobox(
             baud_row,
             textvariable=self.baud_var,
@@ -220,7 +220,7 @@ class MedAudioLabApp(tk.Tk):
             width=10,
         ).pack(side="left", padx=(8, 14))
         ttk.Label(baud_row, text="Гц для анализа").pack(side="left")
-        self.serial_rate_var = tk.StringVar(value="1000")
+        self.serial_rate_var = tk.StringVar(value="200000")
         ttk.Entry(baud_row, textvariable=self.serial_rate_var, width=8).pack(side="left", padx=(8, 0))
         self.serial_status = tk.StringVar(value="COM-порт еще не проверен")
         ttk.Label(serial_box, textvariable=self.serial_status, style="Muted.TLabel", wraplength=320).pack(fill="x", pady=(8, 0))
