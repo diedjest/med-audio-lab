@@ -6,7 +6,9 @@ import numpy as np
 
 import matplotlib
 matplotlib.use("TkAgg")
+import matplotlib.colors as mcolors
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.collections import LineCollection
 from matplotlib.figure import Figure
 from matplotlib.ticker import ScalarFormatter
 import matplotlib.pyplot as plt
@@ -19,6 +21,76 @@ GREEN = "#0f766e"
 RED = "#dc2626"
 AMBER = "#d97706"
 VIOLET = "#7c3aed"
+
+
+def _morlet_ridge_track(
+    freqs_hz: np.ndarray,
+    spec: np.ndarray,
+    *,
+    tone_hz: float | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Гребень Morlet: при известной частоте записи — прямая линия на tone_hz.
+    """
+    spec = np.asarray(spec, dtype=np.float64)
+    freqs_hz = np.asarray(freqs_hz, dtype=np.float64)
+    n_cols = spec.shape[1]
+    cols = np.arange(n_cols, dtype=np.intp)
+
+    if tone_hz is not None and tone_hz > 0:
+        ni = int(np.argmin(np.abs(freqs_hz - float(tone_hz))))
+        f_line = np.full(n_cols, float(tone_hz), dtype=np.float64)
+        return f_line, spec[ni, cols].astype(np.float64)
+
+    peak_idx = np.argmax(spec, axis=0)
+    return freqs_hz[peak_idx].astype(np.float64), spec[peak_idx, cols].astype(np.float64)
+
+
+def _morlet_ridge_line_collection(
+    ax,
+    t: np.ndarray,
+    freqs_hz: np.ndarray,
+    spec: np.ndarray,
+    *,
+    tone_hz: float | None = None,
+    linewidth: float = 0.75,
+):
+    """Тонкая линия гребня Morlet (без «плитки» pcolormesh по полосам)."""
+    t = np.asarray(t, dtype=np.float64)
+    spec = np.asarray(spec, dtype=np.float64)
+    f_line, amp = _morlet_ridge_track(freqs_hz, spec, tone_hz=tone_hz)
+    vmax = float(np.max(amp)) if amp.size and float(np.max(amp)) > 0 else 1.0
+    norm = mcolors.Normalize(vmin=0.0, vmax=vmax)
+    cmap = plt.get_cmap("viridis")
+    ax.set_facecolor(cmap(0.0))
+
+    if t.size < 2:
+        return ax.scatter(
+            t,
+            f_line,
+            c=amp,
+            cmap=cmap,
+            norm=norm,
+            s=2.0,
+            linewidths=0,
+            zorder=3,
+        )
+
+    segments = np.stack(
+        [np.column_stack([t[:-1], f_line[:-1]]), np.column_stack([t[1:], f_line[1:]])],
+        axis=1,
+    )
+    lc = LineCollection(
+        segments,
+        cmap=cmap,
+        norm=norm,
+        linewidths=linewidth,
+        capstyle="round",
+        zorder=3,
+    )
+    lc.set_array(0.5 * (amp[:-1] + amp[1:]))
+    ax.add_collection(lc)
+    return lc
 
 
 def _default_xlim_us_morlet_slice(t: np.ndarray, f_hz: float | None) -> tuple[float, float]:
@@ -258,6 +330,7 @@ class CanvasPlot(ttk.Frame):
         spec_kind: str = "STFT",
         log_freq: bool = False,
         target_hz_line: float | None = None,
+        freq_ylim: tuple[float, float] | None = None,
         colorbar_label: str | None = None,
         note: str = "",
     ) -> None:
@@ -273,7 +346,13 @@ class CanvasPlot(ttk.Frame):
             self.clear(title, "Нет данных для спектрограммы")
             return
 
-        m = self.ax.pcolormesh(t, freqs_hz, spec, shading="auto")
+        morlet_display = spec_kind == "Morlet CWT"
+        if morlet_display:
+            m = _morlet_ridge_line_collection(
+                self.ax, t, freqs_hz, spec, tone_hz=target_hz_line, linewidth=0.75
+            )
+        else:
+            m = self.ax.pcolormesh(t, freqs_hz, spec, shading="auto")
         cbar_label = colorbar_label or ("dB" if spec_kind == "STFT" else "Амплитуда")
         self._colorbar = self.fig.colorbar(m, ax=self.ax, label=cbar_label)
 
@@ -282,11 +361,20 @@ class CanvasPlot(ttk.Frame):
             if pos_freqs.size:
                 try:
                     self.ax.set_yscale("log")
-                    self.ax.set_ylim(float(np.min(pos_freqs)), float(np.max(pos_freqs)))
+                    if freq_ylim is not None:
+                        y0, y1 = float(freq_ylim[0]), float(freq_ylim[1])
+                        if y0 > 0 and y1 > 0 and y0 < y1:
+                            self.ax.set_ylim(y0, y1)
+                        else:
+                            self.ax.set_ylim(float(np.min(pos_freqs)), float(np.max(pos_freqs)))
+                    else:
+                        self.ax.set_ylim(float(np.min(pos_freqs)), float(np.max(pos_freqs)))
                     self.ax.yaxis.set_major_formatter(ScalarFormatter())
                     self.ax.yaxis.set_minor_formatter(ScalarFormatter())
                 except (ValueError, ZeroDivisionError):
                     pass
+            if morlet_display and t.size:
+                self.ax.set_xlim(float(t[0]), float(t[-1]))
 
         if target_hz_line is not None:
             self.ax.axhline(float(target_hz_line), color="white", linewidth=1.0, alpha=0.8)
