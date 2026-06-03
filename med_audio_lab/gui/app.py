@@ -767,11 +767,12 @@ class MedAudioLabApp(tk.Tk):
 
         def _draw() -> None:
             freqs, amp = analysis.fft_spectrum(self.current_data, self.current_samplerate)
-            mask = (freqs >= 500) & (freqs <= 20000)
+            nyqist = self.current_samplerate / 2
+            mask = (freqs >= 5000) & (freqs <= nyqist)
             freqs_plot = freqs[mask]
             amp_plot = amp[mask]
             annotations = []
-            note = "FFT (Chmi): окно Ханнинга, 500–20000 Гц"
+            note = f"FFT (Chmi): окно Ханнинга, 5000–{int(nyqist)} Гц"
             if amp_plot.size > 1:
                 peak_idx = int(np.argmax(amp_plot))
                 peak_f = float(freqs_plot[peak_idx])
@@ -781,7 +782,7 @@ class MedAudioLabApp(tk.Tk):
             self.analysis_plot.draw_xy(
                 freqs_plot,
                 amp_plot,
-                "Спектр Фурье (500–20000 Гц)",
+                f"Спектр Фурье (5000–{int(nyqist)} Гц)",
                 "Частота (Гц)",
                 "Амплитуда",
                 GREEN,
@@ -797,7 +798,7 @@ class MedAudioLabApp(tk.Tk):
 
         def _draw() -> None:
             freqs, amp = analysis.fft_spectrum(self.current_data, self.current_samplerate)
-            mask = freqs <= (self.current_samplerate / 2)
+            mask = (freqs >= 5000) & (freqs <= (self.current_samplerate / 2))
             freqs_plot = freqs[mask]
             amp_plot = amp[mask]
             norm = amp_plot / max(float(np.max(amp_plot)), 1e-12)
@@ -856,7 +857,7 @@ class MedAudioLabApp(tk.Tk):
                 fs,
                 nperseg=2048,
                 noverlap=1536,
-                fmin_hz=0.0,
+                fmin_hz=5000.0,
                 fmax_hz=100000.0,
                 db=True,
             )
@@ -935,7 +936,7 @@ class MedAudioLabApp(tk.Tk):
             return analysis.cwt_scalogram(
                 data,
                 fs,
-                fmin_hz=0.1,
+                fmin_hz=5000.0,
                 fmax_hz=100000.0,
                 max_seconds=4.0,
                 downsample=1,
