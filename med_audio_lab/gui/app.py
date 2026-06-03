@@ -55,6 +55,7 @@ class MedAudioLabApp(tk.Tk):
         self.current_samplerate = 44100
         self.current_record_id: int | None = None
         self.current_path: Path | None = None
+        self.record_tone_hz: float | None = None
         self.current_metrics: dict[str, str] = {}
         self.current_Wx: np.ndarray | None = None
         self.current_cwt_t: np.ndarray | None = None
@@ -274,6 +275,12 @@ class MedAudioLabApp(tk.Tk):
         ttk.Label(file_row, text="Morlet f (Гц):", style="Muted.TLabel").pack(side="left", padx=(16, 4))
         self.morlet_target_var = tk.StringVar(value="10000")
         ttk.Entry(file_row, textvariable=self.morlet_target_var, width=10).pack(side="left")
+        ttk.Label(file_row, text="f от (Гц):", style="Muted.TLabel").pack(side="left", padx=(12, 4))
+        self.morlet_fmin_var = tk.StringVar(value="")
+        ttk.Entry(file_row, textvariable=self.morlet_fmin_var, width=8).pack(side="left")
+        ttk.Label(file_row, text="f до (Гц):", style="Muted.TLabel").pack(side="left", padx=(8, 4))
+        self.morlet_fmax_var = tk.StringVar(value="")
+        ttk.Entry(file_row, textvariable=self.morlet_fmax_var, width=8).pack(side="left")
 
         top = ttk.Frame(self.analysis_tab)
         top.pack(fill="x")
@@ -559,6 +566,10 @@ class MedAudioLabApp(tk.Tk):
 
         self.current_path = path
         self.current_record_id = record_id
+        self.record_tone_hz = analysis.resolve_record_tone_hz(path, data, self.current_samplerate)
+        if self.record_tone_hz is not None:
+            thz = self.record_tone_hz
+            self.morlet_target_var.set(str(int(thz)) if abs(thz - round(thz)) < 1.0 else f"{thz:.1f}")
         self.current_metrics = analysis.metrics(data, self.current_samplerate)
         save_metrics(record_id, self.current_metrics)
 
@@ -567,7 +578,10 @@ class MedAudioLabApp(tk.Tk):
         self.analysis_plot.draw_waveform(data, self.current_samplerate, "Форма сигнала")
         self.play_btn.configure(state="normal")
         self.refresh_library()
-        self.status.set(f"Запись сохранена: {path}")
+        if self.record_tone_hz is not None:
+            self.status.set(f"Запись сохранена: {path} | тон {self.record_tone_hz:.0f} Гц")
+        else:
+            self.status.set(f"Запись сохранена: {path}")
         self.notebook.select(self.analysis_tab)
 
     def play_current(self) -> None:
@@ -682,6 +696,10 @@ class MedAudioLabApp(tk.Tk):
 
         self.current_path = path
         self.current_record_id = record_id
+        self.record_tone_hz = analysis.resolve_record_tone_hz(path, data, samplerate)
+        if self.record_tone_hz is not None:
+            thz = self.record_tone_hz
+            self.morlet_target_var.set(str(int(thz)) if abs(thz - round(thz)) < 1.0 else f"{thz:.1f}")
         self._cwt_cache = None
         self.current_Wx = None
         self.current_cwt_t = None
@@ -693,7 +711,10 @@ class MedAudioLabApp(tk.Tk):
         self.play_btn.configure(state="normal")
         self.record_plot.draw_waveform(data, samplerate, "Загруженная форма сигнала")
         self.analysis_plot.draw_waveform(data, samplerate, "Форма сигнала")
-        self.status.set(f"Загружен файл: {path}")
+        if self.record_tone_hz is not None:
+            self.status.set(f"Загружен файл: {path} | тон {self.record_tone_hz:.0f} Гц")
+        else:
+            self.status.set(f"Загружен файл: {path}")
         self.notebook.select(self.analysis_tab)
 
     def require_audio(self) -> bool:
@@ -863,11 +884,65 @@ class MedAudioLabApp(tk.Tk):
 
         self._run_background("STFT: расчёт...", worker, self._render_stft_result)
 
-    def _morlet_target_hz(self) -> float:
+    def _morlet_tone_hz(self) -> float | None:
+        """Частота тона записи: авто при загрузке, иначе поле Morlet f."""
+        if self.record_tone_hz is not None and self.record_tone_hz > 0:
+            return float(self.record_tone_hz)
         try:
-            return float(self.morlet_target_var.get().strip().replace(",", "."))
+            v = float(self.morlet_target_var.get().strip().replace(",", "."))
+            return v if v > 0 else None
         except ValueError:
-            return 10000.0
+            return None
+
+    def _morlet_display_freq_bounds(self) -> tuple[float | None, float | None]:
+        def _parse(var: tk.StringVar) -> float | None:
+            raw = var.get().strip().replace(",", ".")
+            if not raw:
+                return None
+            try:
+                v = float(raw)
+            except ValueError:
+                return None
+            return v if v > 0 else None
+
+        fmin = _parse(self.morlet_fmin_var)
+        fmax = _parse(self.morlet_fmax_var)
+        if fmin is not None and fmax is not None and fmin > fmax:
+            fmin, fmax = fmax, fmin
+        return fmin, fmax
+
+    def _crop_cwt_for_display(
+        self,
+        freqs_hz: np.ndarray,
+        Wx: np.ndarray,
+        amp: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, tuple[float, float] | None]:
+        freqs_hz = np.asarray(freqs_hz, dtype=np.float64)
+        Wx = np.asarray(Wx)
+        amp = np.asarray(amp, dtype=np.float32)
+        fmin, fmax = self._morlet_display_freq_bounds()
+        mask = np.ones(freqs_hz.shape, dtype=bool)
+        if fmin is not None:
+            mask &= freqs_hz >= fmin
+        if fmax is not None:
+            mask &= freqs_hz <= fmax
+        if not np.any(mask):
+            lo = fmin if fmin is not None else float(np.min(freqs_hz[freqs_hz > 0]))
+            hi = fmax if fmax is not None else float(np.max(freqs_hz))
+            raise ValueError(
+                f"В диапазоне {lo:.0f}–{hi:.0f} Гц нет строк CWT. "
+                "Ослабьте фильтр или пересчитайте вейвлет."
+            )
+        freqs_disp = freqs_hz[mask]
+        Wx_disp = Wx[mask, :]
+        amp_disp = amp[mask, :]
+        pos = freqs_disp > 0
+        if not np.any(pos):
+            raise ValueError("Нет положительных частот в выбранном диапазоне.")
+        y0 = float(fmin) if fmin is not None else float(np.min(freqs_disp[pos]))
+        y1 = float(fmax) if fmax is not None else float(np.max(freqs_disp[pos]))
+        freq_ylim = (y0, y1) if y0 < y1 else None
+        return freqs_disp, Wx_disp, amp_disp, freq_ylim
 
     def _store_cwt_cache(self, t: np.ndarray, freqs_hz: np.ndarray, Wx: np.ndarray) -> None:
         self.current_Wx = Wx
@@ -897,22 +972,39 @@ class MedAudioLabApp(tk.Tk):
         t, freqs_hz, Wx = result
         self._store_cwt_cache(t, freqs_hz, Wx)
         amp = np.abs(Wx)
-        target_hz = self._morlet_target_hz()
+        try:
+            freqs_disp, Wx_disp, amp_disp, freq_ylim = self._crop_cwt_for_display(freqs_hz, Wx, amp)
+        except ValueError as exc:
+            messagebox.showerror("Morlet CWT", str(exc))
+            self.status.set(str(exc))
+            return
+        tone_hz = self._morlet_tone_hz()
+        if tone_hz is None and self.current_data.size:
+            tone_hz = analysis.estimate_dominant_tone_hz(
+                self.current_data, self.current_samplerate
+            )
         self.analysis_plot.draw_interactive_spec(
             t,
-            freqs_hz,
-            amp,
+            freqs_disp,
+            amp_disp,
             title="Morlet CWT скалограмма |Wx|",
             y_label="Частота (Гц)",
-            Wx=Wx,
+            Wx=Wx_disp,
             spec_kind="Morlet CWT",
             log_freq=True,
-            target_hz_line=target_hz,
+            target_hz_line=tone_hz,
+            freq_ylim=freq_ylim,
             colorbar_label="Амплитуда",
             note="ЛКМ — боковой срез, ПКМ — продольный\nМожно затем STFT / «Срез вейвлета»",
         )
         self.analysis_plot.set_spec_click_handler(self._on_spectrogram_click)
-        self.status.set("Morlet CWT построен. CWT сохранён в памяти.")
+        bounds = self._morlet_display_freq_bounds()
+        if bounds[0] is not None or bounds[1] is not None:
+            lo = bounds[0] if bounds[0] is not None else "…"
+            hi = bounds[1] if bounds[1] is not None else "…"
+            self.status.set(f"Morlet CWT построен ({lo}–{hi} Гц). Полный CWT в памяти.")
+        else:
+            self.status.set("Morlet CWT построен. CWT сохранён в памяти.")
 
     def show_wavelet(self) -> None:
         if not self.require_audio():

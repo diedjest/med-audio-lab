@@ -10,8 +10,8 @@ def _default_scales() -> np.ndarray:
 def _densify_scale_gaps(
     scales: np.ndarray,
     *,
-    gap_ratio: float = 2.0,
-    max_freq_ratio: float = 1.12,
+    gap_ratio: float = 1.25,
+    max_freq_ratio: float = 1.08,
 ) -> np.ndarray:
     """
     Добавляет промежуточные Morlet-шкалы там, где соседние центральные частоты

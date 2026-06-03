@@ -100,6 +100,62 @@ def fft_spectrum(data: np.ndarray, samplerate: int):
     return fft_spectrum_from_signal(data, samplerate)
 
 
+def infer_tone_hz_from_path(path: str | Path | None) -> float | None:
+    """
+    Частота тона из имени файла (например test_audiocard_10 → 10 кГц, _30 → 30 кГц).
+    """
+    if path is None:
+        return None
+    stem = Path(path).stem
+    patterns = (
+        r"audiocard[_-]?(\d{2,5})\b",
+        r"[_-](\d{2,5})$",
+        r"(\d{2,5})\s*khz",
+        r"(\d{2,5})\s*hz",
+    )
+    for pat in patterns:
+        m = re.search(pat, stem, flags=re.IGNORECASE)
+        if not m:
+            continue
+        v = int(m.group(1))
+        if v < 1000:
+            return float(v * 1000)
+        return float(v)
+    return None
+
+
+def estimate_dominant_tone_hz(
+    data: np.ndarray,
+    samplerate: int,
+    *,
+    fmin_hz: float = 400.0,
+    fmax_hz: float = 120_000.0,
+) -> float | None:
+    """Главный пик спектра Фурье (Гц)."""
+    x = as_mono(data)
+    if x.size < 32:
+        return None
+    freqs, mag = fft_spectrum_from_signal(x, int(samplerate))
+    band = (freqs >= fmin_hz) & (freqs <= fmax_hz)
+    if not np.any(band):
+        return None
+    idx = int(np.argmax(mag[band]))
+    peak = float(freqs[band][idx])
+    return peak if peak > 0 else None
+
+
+def resolve_record_tone_hz(
+    path: str | Path | None,
+    data: np.ndarray,
+    samplerate: int,
+) -> float | None:
+    """Частота записи: сначала из имени файла, иначе по FFT."""
+    from_name = infer_tone_hz_from_path(path)
+    if from_name is not None:
+        return from_name
+    return estimate_dominant_tone_hz(data, samplerate)
+
+
 def stft_spectrogram(
     data: np.ndarray,
     samplerate: int,
