@@ -61,13 +61,20 @@ class MedAudioLabApp(tk.Tk):
         self.current_cwt_t: np.ndarray | None = None
         self.current_cwt_freqs: np.ndarray | None = None
         self._cwt_cache: dict | None = None
+        self.current_impulses: list[dict] = []
+        self.active_impulse_index: int | None = None
+        self.selected_range: tuple[float, float] | None = None
+        self.span = None
         self.device_by_label = {}
         self.serial_by_label = {}
         self.save_dir = get_save_dir()
         self._bg_busy = False
+        self.live_frequency_status = tk.StringVar(value="Пик частоты: -")
+        self._wheel_scroll_targets: list[tuple[tk.Canvas, tk.Widget]] = []
 
         self._configure_style()
         self._build_ui()
+        self._install_mousewheel_scrolling()
         self.refresh_devices()
         self.refresh_serial_ports()
         self.refresh_library()
@@ -94,6 +101,41 @@ class MedAudioLabApp(tk.Tk):
         style.map("Danger.TButton", background=[("active", "#fee2e2")])
         style.configure("Treeview", rowheight=28, font=("Segoe UI", 9))
         style.configure("Treeview.Heading", font=("Segoe UI Semibold", 9))
+
+    def _install_mousewheel_scrolling(self) -> None:
+        self.bind_all("<MouseWheel>", self._on_mousewheel_scroll, add="+")
+        self.bind_all("<Button-4>", self._on_mousewheel_scroll, add="+")
+        self.bind_all("<Button-5>", self._on_mousewheel_scroll, add="+")
+
+    def _register_scroll_canvas(self, canvas: tk.Canvas, content: tk.Widget) -> None:
+        self._wheel_scroll_targets.append((canvas, content))
+
+    @staticmethod
+    def _is_descendant(widget: tk.Widget | None, parent: tk.Widget) -> bool:
+        while widget is not None:
+            if widget == parent:
+                return True
+            widget = widget.master
+        return False
+
+    def _on_mousewheel_scroll(self, event) -> str | None:
+        widget = self.winfo_containing(event.x_root, event.y_root)
+        if widget is None or isinstance(widget, (tk.Text, ttk.Treeview, ttk.Combobox)):
+            return None
+        for canvas, content in self._wheel_scroll_targets:
+            if self._is_descendant(widget, canvas) or self._is_descendant(widget, content):
+                if getattr(event, "num", None) == 4:
+                    units = -3
+                elif getattr(event, "num", None) == 5:
+                    units = 3
+                else:
+                    delta = int(getattr(event, "delta", 0))
+                    units = -3 if delta > 0 else 3
+                    if abs(delta) >= 120:
+                        units = -3 * int(delta / 120)
+                canvas.yview_scroll(units, "units")
+                return "break"
+        return None
 
     def _build_ui(self) -> None:
         root = ttk.Frame(self, padding=14)
@@ -146,6 +188,7 @@ class MedAudioLabApp(tk.Tk):
         ttk.Label(level_box, textvariable=self.record_state, style="Strong.TLabel").pack(anchor="e")
         self.level_var = tk.DoubleVar(value=0.0)
         ttk.Progressbar(level_box, variable=self.level_var, maximum=100).pack(fill="x", pady=(4, 0))
+        ttk.Label(level_box, textvariable=self.live_frequency_status, style="Muted.TLabel").pack(anchor="e", pady=(4, 0))
 
         body = ttk.Frame(self.record_tab)
         body.pack(fill="both", expand=True)
@@ -166,6 +209,7 @@ class MedAudioLabApp(tk.Tk):
 
         left.bind("<Configure>", _resize_left_panel)
         left_canvas.bind("<Configure>", _resize_left_panel)
+        self._register_scroll_canvas(left_canvas, left)
         right = ttk.Frame(body)
         right.pack(side="left", fill="both", expand=True)
 
@@ -263,9 +307,15 @@ class MedAudioLabApp(tk.Tk):
             wraplength=320,
         ).pack(anchor="nw")
 
-        self.record_plot = CanvasPlot(right, "Живая форма сигнала")
-        self.record_plot.pack(fill="both", expand=True)
+        self.live_wave_plot = CanvasPlot(right, "Живая форма сигнала")
+        self.live_wave_plot.pack(fill="both", expand=True)
+        self.live_freq_plot = CanvasPlot(right, "Живой спектр частот")
+        self.live_freq_plot.configure(height=240)
+        self.live_freq_plot.pack(fill="x", pady=(8, 0))
+        self.live_freq_plot.pack_propagate(False)
+        self.record_plot = self.live_wave_plot
         self.record_plot.clear("Живая форма сигнала", "Нажмите «Начать запись»")
+        self.live_freq_plot.clear("Живой спектр частот", "Ожидание частотного пика")
 
     def _build_analysis_tab(self) -> None:
         file_row = ttk.Frame(self.analysis_tab)
@@ -293,6 +343,7 @@ class MedAudioLabApp(tk.Tk):
             ("Срез вейвлета", self.show_wavelet_slice),
             ("Автокорреляция", self.show_autocorrelation),
             ("Огибающая", self.show_envelope),
+            ("Импульсы", self.show_impulses),
         ]:
             ttk.Button(top, text=text, command=command, style="Wide.TButton").pack(side="left", padx=(0, 6))
 
@@ -300,7 +351,7 @@ class MedAudioLabApp(tk.Tk):
         body.pack(fill="both", expand=True, pady=(10, 0))
         left = ttk.Frame(body)
         left.pack(side="left", fill="both", expand=True, padx=(0, 12))
-        right_holder = ttk.Frame(body, width=360)
+        right_holder = ttk.Frame(body, width=400)
         right_holder.pack(side="left", fill="y")
         right_holder.pack_propagate(False)
         right_canvas = tk.Canvas(right_holder, background="#f6f8fb", highlightthickness=0)
@@ -317,6 +368,7 @@ class MedAudioLabApp(tk.Tk):
 
         right.bind("<Configure>", _resize_analysis_side)
         right_canvas.bind("<Configure>", _resize_analysis_side)
+        self._register_scroll_canvas(right_canvas, right)
 
         self.analysis_plot = CanvasPlot(left, "Анализ")
         self.analysis_plot.pack(fill="both", expand=True)
@@ -331,6 +383,61 @@ class MedAudioLabApp(tk.Tk):
         self.metrics_tree.column("#0", width=165, anchor="w")
         self.metrics_tree.column("value", width=140, anchor="w")
         self.metrics_tree.pack(fill="both", expand=True)
+
+        impulse_box = ttk.LabelFrame(right, text="Разметка импульсов", padding=10)
+        impulse_box.pack(fill="x", pady=(10, 0))
+        self.impulse_threshold_var = tk.StringVar(value="-35")
+        self.impulse_min_duration_var = tk.StringVar(value="0.4")
+        self.impulse_fmin_var = tk.StringVar(value="5000")
+        self.impulse_pad_ms_var = tk.StringVar(value="10.0")
+
+        params_grid = ttk.Frame(impulse_box)
+        params_grid.pack(fill="x")
+        ttk.Label(params_grid, text="Порог, dB").grid(row=0, column=0, sticky="w")
+        ttk.Entry(params_grid, textvariable=self.impulse_threshold_var, width=9).grid(row=0, column=1, sticky="ew", padx=(6, 12))
+        ttk.Label(params_grid, text="Мин. длит., мс").grid(row=0, column=2, sticky="w")
+        ttk.Entry(params_grid, textvariable=self.impulse_min_duration_var, width=9).grid(row=0, column=3, sticky="ew", padx=(6, 0))
+        ttk.Label(params_grid, text="Частота от, Гц").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        ttk.Entry(params_grid, textvariable=self.impulse_fmin_var, width=9).grid(row=1, column=1, sticky="ew", padx=(6, 12), pady=(6, 0))
+        ttk.Label(params_grid, text="Окно X, мс").grid(row=1, column=2, sticky="w", pady=(6, 0))
+        ttk.Entry(params_grid, textvariable=self.impulse_pad_ms_var, width=9).grid(row=1, column=3, sticky="ew", padx=(6, 0), pady=(6, 0))
+        for col in (1, 3):
+            params_grid.columnconfigure(col, weight=1)
+
+        find_row = ttk.Frame(impulse_box)
+        find_row.pack(fill="x", pady=(8, 0))
+        ttk.Button(find_row, text="Найти импульсы", command=self.show_impulses, style="Primary.TButton").pack(side="left", fill="x", expand=True, padx=(0, 6))
+        ttk.Button(find_row, text="Экспорт CSV", command=self.export_impulses_csv).pack(side="left", fill="x", expand=True)
+
+        action_grid = ttk.Frame(impulse_box)
+        action_grid.pack(fill="x", pady=(6, 0))
+        zoom_row = ttk.Frame(action_grid)
+        zoom_row.pack(fill="x", pady=(0, 6))
+        ttk.Button(zoom_row, text="Крупнее", command=lambda: self.scale_impulse_window(0.5), style="Wide.TButton").pack(side="left", fill="x", expand=True, padx=(0, 6))
+        ttk.Button(zoom_row, text="Шире", command=lambda: self.scale_impulse_window(2.0), style="Wide.TButton").pack(side="left", fill="x", expand=True)
+        ttk.Button(action_grid, text="Показать пакет волн", command=self.focus_selected_impulse, style="Wide.TButton").pack(fill="x")
+        ttk.Button(
+            action_grid,
+            text="Взять фрагмент в работу",
+            command=self.use_selected_impulse_fragment,
+            style="Primary.TButton",
+        ).pack(fill="x", pady=(6, 0))
+        self.impulse_tree = ttk.Treeview(
+            impulse_box,
+            columns=("start", "dur", "freq", "peak"),
+            show="headings",
+            height=6,
+        )
+        self.impulse_tree.heading("start", text="старт, с")
+        self.impulse_tree.heading("dur", text="мс")
+        self.impulse_tree.heading("freq", text="кГц")
+        self.impulse_tree.heading("peak", text="пик")
+        self.impulse_tree.column("start", width=76, anchor="e")
+        self.impulse_tree.column("dur", width=54, anchor="e")
+        self.impulse_tree.column("freq", width=54, anchor="e")
+        self.impulse_tree.column("peak", width=54, anchor="e")
+        self.impulse_tree.pack(fill="x", pady=(8, 0))
+        self.impulse_tree.bind("<Double-1>", lambda _event: self.focus_selected_impulse())
 
         transform_box = ttk.LabelFrame(right, text="Преобразования", padding=8)
         transform_box.pack(fill="x", pady=(10, 0))
@@ -507,11 +614,16 @@ class MedAudioLabApp(tk.Tk):
             return
         self.current_data = np.zeros(0, dtype=np.float32)
         self.current_raw_data = np.zeros(0, dtype=np.float32)
+        self.current_impulses = []
+        self.active_impulse_index = None
+        self.update_impulses_view()
+        self.live_frequency_status.set("Пик частоты: -")
         self.record_btn.configure(state="disabled")
         self.pause_btn.configure(state="normal", text="Пауза")
         self.stop_btn.configure(state="normal")
         self.play_btn.configure(state="disabled")
         self.record_plot.clear("Живая форма сигнала", "Запись началась")
+        self.live_freq_plot.clear("Живой спектр частот", "Ожидание сигнала")
 
     def toggle_pause(self) -> None:
         active = self.serial_recorder if self.serial_recorder.is_recording else self.recorder
@@ -572,6 +684,9 @@ class MedAudioLabApp(tk.Tk):
             self.morlet_target_var.set(str(int(thz)) if abs(thz - round(thz)) < 1.0 else f"{thz:.1f}")
         self.current_metrics = analysis.metrics(data, self.current_samplerate)
         save_metrics(record_id, self.current_metrics)
+        self.current_impulses = []
+        self.active_impulse_index = None
+        self.update_impulses_view()
 
         self.update_metrics_view()
         self.record_plot.draw_waveform(data, self.current_samplerate, "Сохраненная форма сигнала")
@@ -693,6 +808,8 @@ class MedAudioLabApp(tk.Tk):
         self.current_data = data
         self.original_samplerate = samplerate
         self.original_data = data.copy()
+        self.current_impulses = []
+        self.active_impulse_index = None
 
         self.current_path = path
         self.current_record_id = record_id
@@ -708,6 +825,7 @@ class MedAudioLabApp(tk.Tk):
         if record_id:
             save_metrics(record_id, self.current_metrics)
         self.update_metrics_view()
+        self.update_impulses_view()
         self.play_btn.configure(state="normal")
         self.record_plot.draw_waveform(data, samplerate, "Загруженная форма сигнала")
         self.analysis_plot.draw_waveform(data, samplerate, "Форма сигнала")
@@ -746,6 +864,223 @@ class MedAudioLabApp(tk.Tk):
             props=dict(alpha=0.3, facecolor='red'), interactive=True
         )
 
+    def _read_float_setting(self, var: tk.StringVar, fallback: float) -> float:
+        raw = var.get().strip().replace(",", ".")
+        if not raw:
+            return fallback
+        try:
+            return float(raw)
+        except ValueError:
+            return fallback
+
+    def update_impulses_view(self) -> None:
+        if not hasattr(self, "impulse_tree"):
+            return
+        self.impulse_tree.delete(*self.impulse_tree.get_children())
+        for item in self.current_impulses[:500]:
+            freq = float(item.get("dominant_freq_hz", np.nan))
+            freq_txt = "-" if not np.isfinite(freq) else f"{freq / 1000.0:.2f}"
+            self.impulse_tree.insert(
+                "",
+                "end",
+                iid=str(int(item.get("index", 0))),
+                values=(
+                    f"{float(item.get('start_s', 0.0)):.5f}",
+                    f"{float(item.get('duration_ms', 0.0)):.2f}",
+                    freq_txt,
+                    f"{float(item.get('peak_amplitude', 0.0)):.3f}",
+                ),
+            )
+        if self.active_impulse_index is not None:
+            iid = str(self.active_impulse_index)
+            if self.impulse_tree.exists(iid):
+                self.impulse_tree.selection_set(iid)
+                self.impulse_tree.focus(iid)
+
+    def show_impulses(self) -> None:
+        if not self.require_audio():
+            return
+        threshold = self._read_float_setting(self.impulse_threshold_var, -35.0)
+        min_duration = max(0.05, self._read_float_setting(self.impulse_min_duration_var, 0.4))
+        fmin = max(0.0, self._read_float_setting(self.impulse_fmin_var, 5000.0))
+
+        def _draw() -> None:
+            self.current_impulses = analysis.detect_impulses(
+                self.current_data,
+                self.current_samplerate,
+                threshold_db=threshold,
+                min_duration_ms=min_duration,
+                fmin_hz=fmin,
+            )
+            self.active_impulse_index = int(self.current_impulses[0]["index"]) if self.current_impulses else None
+            self.update_impulses_view()
+            spans = [
+                {
+                    "start": float(item["start_s"]),
+                    "end": float(item["end_s"]),
+                    "label": str(int(item["index"])),
+                    "color": AMBER,
+                    "alpha": 0.20,
+                }
+                for item in self.current_impulses[:120]
+            ]
+            note = (
+                f"Импульсов: {len(self.current_impulses)}\n"
+                f"Порог: {threshold:g} dB, мин: {min_duration:g} мс\n"
+                f"Частоты считаются от {fmin:g} Гц"
+            )
+            self.analysis_plot.draw_waveform(
+                self.current_data,
+                self.current_samplerate,
+                "Разметка импульсов",
+                spans=spans,
+                note=note,
+            )
+            self.current_metrics = analysis.metrics(self.current_data, self.current_samplerate)
+            self.current_metrics["Импульсов"] = str(len(self.current_impulses))
+            self.update_metrics_view()
+            self.status.set(f"Разметка готова: найдено импульсов {len(self.current_impulses)}.")
+
+        self._safe_analysis_plot(_draw)
+
+    def _selected_impulse(self) -> dict | None:
+        if not self.current_impulses:
+            return None
+        selected = self.impulse_tree.selection() if hasattr(self, "impulse_tree") else ()
+        if selected:
+            try:
+                self.active_impulse_index = int(selected[0])
+            except ValueError:
+                pass
+        if self.active_impulse_index is None:
+            self.active_impulse_index = int(self.current_impulses[0].get("index", 1))
+        for item in self.current_impulses:
+            if int(item.get("index", 0)) == self.active_impulse_index:
+                return item
+        return None
+
+    def scale_impulse_window(self, factor: float) -> None:
+        current = max(0.05, self._read_float_setting(self.impulse_pad_ms_var, 10.0))
+        new_value = min(5000.0, max(0.05, current * float(factor)))
+        if new_value >= 100.0:
+            text = f"{new_value:.0f}"
+        elif new_value >= 10.0:
+            text = f"{new_value:.1f}"
+        else:
+            text = f"{new_value:.2f}".rstrip("0").rstrip(".")
+        self.impulse_pad_ms_var.set(text)
+        if self.current_impulses:
+            self.focus_selected_impulse()
+
+    def focus_selected_impulse(self) -> None:
+        item = self._selected_impulse()
+        if item is None:
+            messagebox.showinfo("Разметка импульсов", "Сначала найдите импульсы и выберите строку в таблице.")
+            return
+        fs = max(1, int(self.current_samplerate))
+        start_s = float(item["start_s"])
+        end_s = float(item["end_s"])
+        peak_s = float(item.get("peak_time_s", (start_s + end_s) / 2.0))
+        window_ms = max(0.05, self._read_float_setting(self.impulse_pad_ms_var, 10.0))
+        half_window_ms = window_ms / 2.0
+        half_window_s = half_window_ms / 1000.0
+        left = max(0, int((peak_s - half_window_s) * fs))
+        right = min(self.current_data.size, int((peak_s + half_window_s) * fs))
+        if right <= left:
+            return
+        t = (np.arange(left, right, dtype=np.float32) / fs - peak_s) * 1000.0
+        segment = self.current_data[left:right]
+        freq = float(item.get("dominant_freq_hz", np.nan))
+        freq_txt = "-" if not np.isfinite(freq) else f"{freq / 1000.0:.2f} кГц"
+        peak_i = min(max(int(round(peak_s * fs)), left), right - 1)
+        peak_y = float(self.current_data[peak_i])
+        note = (
+            f"Импульс {int(item['index'])}\n"
+            f"Длительность: {float(item['duration_ms']):.2f} мс\n"
+            f"Пик частоты: {freq_txt}\n"
+            f"Окно X: {window_ms:.2f} мс"
+        )
+        self.analysis_plot.draw_xy(
+            t,
+            segment,
+            f"Импульс {int(item['index'])}",
+            "время от пика, мс",
+            "амплитуда",
+            BLUE,
+            spans=[{"start": (start_s - peak_s) * 1000.0, "end": (end_s - peak_s) * 1000.0, "color": AMBER, "alpha": 0.24}],
+            annotations=[{"x": 0.0, "y": peak_y, "label": "пик", "color": RED}],
+            note=note,
+            xlim=(-half_window_ms, half_window_ms),
+        )
+        self.selected_range = (left / fs, right / fs)
+        self._destroy_span_selector()
+
+        def on_select(xmin_ms, xmax_ms):
+            lo_ms, hi_ms = sorted((float(xmin_ms), float(xmax_ms)))
+            lo_s = max(0.0, peak_s + lo_ms / 1000.0)
+            hi_s = min(self.current_data.size / fs, peak_s + hi_ms / 1000.0)
+            if hi_s > lo_s:
+                self.selected_range = (lo_s, hi_s)
+                self.status.set(
+                    f"Уточнен фрагмент импульса {int(item['index'])}: {lo_s:.6f}-{hi_s:.6f} с. "
+                    "Можно нажать «Взять фрагмент»."
+                )
+
+        self.span = SpanSelector(
+            self.analysis_plot.ax,
+            on_select,
+            "horizontal",
+            useblit=True,
+            props=dict(alpha=0.25, facecolor="green"),
+            interactive=True,
+        )
+        self.status.set(
+            f"Показан пакет импульса {int(item['index'])}: окно X {window_ms:.2f} мс. "
+            "«Крупнее» уменьшает окно и растягивает волны."
+        )
+
+    def use_selected_impulse_fragment(self) -> None:
+        item = self._selected_impulse()
+        if item is None:
+            messagebox.showinfo("Разметка импульсов", "Сначала найдите импульсы и выберите строку в таблице.")
+            return
+        impulse_index = int(item["index"])
+        self.focus_selected_impulse()
+        if not hasattr(self, "selected_range") or self.selected_range is None:
+            return
+        self.crop_to_selection()
+        self.status.set(
+            f"Импульс {impulse_index} взят в работу. Теперь преобразования, FFT, CWT и сохранение применяются к этому фрагменту."
+        )
+
+    def export_impulses_csv(self) -> None:
+        if not self.require_audio():
+            return
+        if not self.current_impulses:
+            self.show_impulses()
+            if not self.current_impulses:
+                messagebox.showinfo("Разметка импульсов", "Импульсы не найдены, CSV не создан.")
+                return
+        initial = "impulses.csv"
+        if self.current_path is not None:
+            initial = f"{self.current_path.stem}_impulses.csv"
+        path = filedialog.asksaveasfilename(
+            title="Сохранить разметку импульсов",
+            defaultextension=".csv",
+            filetypes=[("CSV", "*.csv"), ("Все файлы", "*.*")],
+            initialfile=initial,
+            initialdir=str(self.save_dir),
+        )
+        if not path:
+            return
+        try:
+            analysis.save_impulses_csv(self.current_impulses, path)
+        except Exception as exc:
+            messagebox.showerror("Разметка импульсов", str(exc))
+            return
+        self.status.set(f"Разметка импульсов сохранена: {path}")
+        messagebox.showinfo("Разметка импульсов", f"CSV сохранен:\n{path}")
+
     def crop_to_selection(self) -> None:
         if not self.require_audio():
             return
@@ -763,6 +1098,9 @@ class MedAudioLabApp(tk.Tk):
 
         self.current_data = self.current_data[start_idx:end_idx]
         self.selected_range = None
+        self.current_impulses = []
+        self.active_impulse_index = None
+        self.update_impulses_view()
 
         self.current_metrics = analysis.metrics(self.current_data, self.current_samplerate)
         self.update_metrics_view()
@@ -776,6 +1114,9 @@ class MedAudioLabApp(tk.Tk):
         self.current_data = self.original_data.copy()
         self.current_samplerate = self.original_samplerate
         self.selected_range = None
+        self.current_impulses = []
+        self.active_impulse_index = None
+        self.update_impulses_view()
 
         self.current_metrics = analysis.metrics(self.current_data, self.current_samplerate)
         self.update_metrics_view()
@@ -1319,6 +1660,9 @@ class MedAudioLabApp(tk.Tk):
             return
         self.current_metrics = analysis.metrics(self.current_data, self.current_samplerate)
         self.update_metrics_view()
+        self.current_impulses = []
+        self.active_impulse_index = None
+        self.update_impulses_view()
         self.analysis_plot.draw_waveform(self.current_data, self.current_samplerate, f"После преобразования: {label}")
         self.status.set(f"Выполнено преобразование: {label}")
 
@@ -1415,11 +1759,22 @@ class MedAudioLabApp(tk.Tk):
     def _live_tick(self) -> None:
         if self.recorder.is_recording or self.serial_recorder.is_recording:
             active = self.serial_recorder if self.serial_recorder.is_recording else self.recorder
-            snapshot = active.snapshot(max_samples=self.current_samplerate * 8)
+            snapshot = active.snapshot(max_samples=max(1024, int(self.current_samplerate * 2.0)))
             if snapshot.size:
                 plot_data = analysis.normalize(snapshot) if self.serial_recorder.is_recording else snapshot
                 title = "Живой сигнал COM-порта" if self.serial_recorder.is_recording else "Живая форма сигнала"
-                self.record_plot.draw_waveform(plot_data, self.current_samplerate, title)
+                self.record_plot.draw_live_waveform(plot_data, self.current_samplerate, title)
+                freqs, amp, peak_hz, _rms = analysis.live_frequency_spectrum(
+                    plot_data,
+                    self.current_samplerate,
+                    window_ms=80.0,
+                    fmin_hz=5000.0,
+                )
+                self.live_freq_plot.draw_live_spectrum(freqs, amp, peak_hz, "Живой спектр последнего окна")
+                if peak_hz is not None:
+                    self.live_frequency_status.set(f"Пик частоты: {peak_hz / 1000.0:.2f} кГц")
+                else:
+                    self.live_frequency_status.set("Пик частоты: -")
             if self.serial_recorder.is_recording:
                 good, bad = self.serial_recorder.line_stats
                 self.record_state.set(f"COM: принято {good}, ошибок {bad}")

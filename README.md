@@ -61,6 +61,22 @@ python -m med_audio_lab
 
 ```
 
+## Сборка EXE
+
+Из корня проекта:
+
+```bat
+scripts\build_exe.bat
+```
+
+Если запускаете именно PowerShell-скрипт напрямую и политика Windows блокирует `.ps1`, используйте:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_exe.ps1
+```
+
+Скрипт создаёт `.venv`, ставит зависимости из `requirements.txt` и собирает `dist\MedAudioLab.exe` через PyInstaller.
+
 ## Требования
 
 Библиотеки для анализа и обработки данных:

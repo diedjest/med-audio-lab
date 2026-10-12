@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import textwrap
 import tkinter as tk
 from tkinter import ttk
 import numpy as np
@@ -191,6 +192,10 @@ class CanvasPlot(ttk.Frame):
         self.current_spec: dict | None = None
         self._spec_click_cid = None
         self._on_spec_click = None
+        self._live_kind = None
+        self._live_line = None
+        self._live_peak_line = None
+        self._live_peak_text = None
 
         self.clear(title, "Нет данных")
 
@@ -210,6 +215,10 @@ class CanvasPlot(ttk.Frame):
         except Exception:
             pass
         self.ax = self.fig.add_subplot(111)
+        self._live_kind = None
+        self._live_line = None
+        self._live_peak_line = None
+        self._live_peak_text = None
 
     def _finalize_draw(self, *, with_colorbar: bool = False) -> None:
         if with_colorbar:
@@ -227,15 +236,17 @@ class CanvasPlot(ttk.Frame):
         self._last = ("clear", title, message)
         self._rebuild_axes()
         self.ax.set_axis_off()
+        message_text = "\n".join(textwrap.wrap(message, width=30)) if message else ""
         self.ax.text(
             0.5,
             0.5,
-            message,
+            message_text,
             ha="center",
             va="center",
-            color="#64748b",
+            color="#94a3b8",
             fontname="Segoe UI",
-            fontsize=14,
+            fontsize=11,
+            linespacing=1.35,
             transform=self.ax.transAxes,
         )
         self.current_spec = None
@@ -260,11 +271,13 @@ class CanvasPlot(ttk.Frame):
         y_label: str = "",
         color: str = BLUE,
         annotations: list[dict] | None = None,
+        spans: list[dict] | None = None,
         note: str = "",
+        xlim: tuple[float, float] | None = None,
         remember: bool = True,
     ) -> None:
         if remember:
-            self._last = ("xy", x.copy(), y.copy(), title, x_label, y_label, color, annotations or [], note)
+            self._last = ("xy", x.copy(), y.copy(), title, x_label, y_label, color, annotations or [], spans or [], note, xlim)
         self.title_var.set(title)
         self._rebuild_axes()
         self.ax.set_axis_on()
@@ -278,10 +291,36 @@ class CanvasPlot(ttk.Frame):
             n = min(x.size, y.size)
             x, y = x[:n], y[:n]
 
+        for item in spans or []:
+            try:
+                x0 = float(item["start"])
+                x1 = float(item["end"])
+                if x1 <= x0:
+                    continue
+                col = str(item.get("color", AMBER))
+                alpha = float(item.get("alpha", 0.18))
+                self.ax.axvspan(x0, x1, color=col, alpha=alpha, linewidth=0)
+                label = str(item.get("label", ""))
+                if label:
+                    self.ax.text(
+                        (x0 + x1) / 2.0,
+                        0.98,
+                        label,
+                        ha="center",
+                        va="top",
+                        transform=self.ax.get_xaxis_transform(),
+                        fontsize=8,
+                        color=col,
+                    )
+            except (KeyError, TypeError, ValueError):
+                continue
+
         self.ax.plot(x, y, color=color, linewidth=1.5)
         self.ax.set_xlabel(x_label)
         self.ax.set_ylabel(y_label)
         self.ax.grid(True, linestyle="-", alpha=0.5)
+        if xlim is not None:
+            self.ax.set_xlim(float(xlim[0]), float(xlim[1]))
 
         for item in annotations or []:
             try:
@@ -405,7 +444,115 @@ class CanvasPlot(ttk.Frame):
         }
         self._finalize_draw(with_colorbar=True)
 
-    def draw_waveform(self, data: np.ndarray, samplerate: int, title: str = "Форма сигнала") -> None:
+    def draw_waveform(
+        self,
+        data: np.ndarray,
+        samplerate: int,
+        title: str = "Форма сигнала",
+        *,
+        annotations: list[dict] | None = None,
+        spans: list[dict] | None = None,
+        note: str = "",
+        xlim: tuple[float, float] | None = None,
+    ) -> None:
         data = np.asarray(data, dtype=np.float32)
         t = np.arange(data.size, dtype=np.float32) / max(1, samplerate)
-        self.draw_xy(t, data, title, "время, с", "амплитуда", BLUE)
+        self.draw_xy(t, data, title, "время, с", "амплитуда", BLUE, annotations=annotations, spans=spans, note=note, xlim=xlim)
+
+    def draw_live_waveform(
+        self,
+        data: np.ndarray,
+        samplerate: int,
+        title: str = "Живая форма сигнала",
+        *,
+        max_points: int = 4000,
+    ) -> None:
+        data = np.asarray(data, dtype=np.float32)
+        if data.size == 0:
+            self.clear(title, "Ожидание сигнала")
+            return
+        if self._live_kind != "waveform" or self._live_line is None:
+            self.title_var.set(title)
+            self._rebuild_axes()
+            self._live_kind = "waveform"
+            self.ax.set_axis_on()
+            (self._live_line,) = self.ax.plot([], [], color=BLUE, linewidth=1.1)
+            self.ax.set_xlabel("время до текущего момента, с")
+            self.ax.set_ylabel("амплитуда")
+            self.ax.grid(True, linestyle="-", alpha=0.45)
+            self.fig.subplots_adjust(left=0.10, right=0.96, bottom=0.18, top=0.88)
+
+        n = min(data.size, max(64, int(max_points)))
+        if data.size > n:
+            idx = np.linspace(0, data.size - 1, n, dtype=np.intp)
+            y = data[idx]
+            x = (idx - (data.size - 1)) / max(1, samplerate)
+        else:
+            y = data
+            x = (np.arange(data.size, dtype=np.float32) - (data.size - 1)) / max(1, samplerate)
+
+        self.title_var.set(title)
+        self._live_line.set_data(x, y)
+        self.ax.set_xlim(float(x[0]), 0.0)
+        peak = float(np.max(np.abs(y))) if y.size else 0.0
+        ylim = max(0.02, peak * 1.18)
+        self.ax.set_ylim(-ylim, ylim)
+        self.canvas.draw_idle()
+
+    def draw_live_spectrum(
+        self,
+        freqs_hz: np.ndarray,
+        amplitude: np.ndarray,
+        peak_hz: float | None,
+        title: str = "Живой спектр частот",
+    ) -> None:
+        freqs_hz = np.asarray(freqs_hz, dtype=np.float64)
+        amplitude = np.asarray(amplitude, dtype=np.float32)
+        if freqs_hz.size == 0 or amplitude.size == 0:
+            self.clear(title, "Недостаточно данных для спектра")
+            return
+
+        if self._live_kind != "spectrum" or self._live_line is None:
+            self.title_var.set(title)
+            self._rebuild_axes()
+            self._live_kind = "spectrum"
+            self.ax.set_axis_on()
+            (self._live_line,) = self.ax.plot([], [], color=GREEN, linewidth=1.2)
+            self._live_peak_line = self.ax.axvline(0.0, color=RED, linestyle="--", linewidth=1.0, alpha=0.75)
+            self._live_peak_text = self.ax.text(
+                0.98,
+                0.92,
+                "",
+                transform=self.ax.transAxes,
+                ha="right",
+                va="top",
+                bbox=dict(boxstyle="round,pad=0.25", fc="#f8fafc", ec="#cbd5e1", alpha=0.9),
+                fontsize=9,
+            )
+            self.ax.set_xlabel("частота, кГц")
+            self.ax.set_ylabel("уровень")
+            self.ax.grid(True, linestyle="-", alpha=0.45)
+            self.fig.subplots_adjust(left=0.10, right=0.96, bottom=0.18, top=0.88)
+
+        n = min(freqs_hz.size, amplitude.size)
+        x = freqs_hz[:n] / 1000.0
+        y = amplitude[:n]
+        self.title_var.set(title)
+        self._live_line.set_data(x, y)
+        self.ax.set_xlim(float(x[0]), float(x[-1]) if x[-1] > x[0] else float(x[0] + 1.0))
+        ymax = max(0.05, float(np.max(y)) * 1.12 if y.size else 1.0)
+        self.ax.set_ylim(0.0, ymax)
+
+        if peak_hz is not None and np.isfinite(peak_hz):
+            peak_khz = float(peak_hz) / 1000.0
+            if self._live_peak_line is not None:
+                self._live_peak_line.set_visible(True)
+                self._live_peak_line.set_xdata([peak_khz, peak_khz])
+            if self._live_peak_text is not None:
+                self._live_peak_text.set_text(f"пик: {peak_khz:.2f} кГц")
+        else:
+            if self._live_peak_line is not None:
+                self._live_peak_line.set_visible(False)
+            if self._live_peak_text is not None:
+                self._live_peak_text.set_text("пик: -")
+        self.canvas.draw_idle()

@@ -152,10 +152,22 @@ class Recorder:
         with self._lock:
             if not self._chunks:
                 return np.zeros(0, dtype=np.float32)
-            data = np.concatenate(self._chunks).astype(np.float32, copy=False)
-        if max_samples and data.size > max_samples:
-            return data[-max_samples:]
-        return data
+            if max_samples and max_samples > 0:
+                remaining = int(max_samples)
+                parts: list[np.ndarray] = []
+                for chunk in reversed(self._chunks):
+                    if remaining <= 0:
+                        break
+                    if chunk.size <= remaining:
+                        parts.append(chunk)
+                        remaining -= chunk.size
+                    else:
+                        parts.append(chunk[-remaining:])
+                        break
+                if not parts:
+                    return np.zeros(0, dtype=np.float32)
+                return np.concatenate(list(reversed(parts))).astype(np.float32, copy=False)
+            return np.concatenate(self._chunks).astype(np.float32, copy=False)
 
 
 class Player:

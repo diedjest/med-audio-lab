@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import math
 import re
 from pathlib import Path
@@ -96,6 +97,51 @@ def envelope(data: np.ndarray, window_ms: int = 12, samplerate: int = 44100) -> 
     return np.convolve(x, kernel, mode="same").astype(np.float32)
 
 
+def live_frequency_spectrum(
+    data: np.ndarray,
+    samplerate: int,
+    *,
+    window_ms: float = 80.0,
+    fmin_hz: float = 5000.0,
+    fmax_hz: float | None = None,
+    min_rms: float = 1e-5,
+) -> tuple[np.ndarray, np.ndarray, float | None, float]:
+    """Быстрый спектр последнего окна записи для live-индикации частоты."""
+    x = remove_dc(as_mono(data))
+    fs = max(1, int(samplerate))
+    if x.size < 16:
+        return np.zeros(0), np.zeros(0), None, 0.0
+
+    n_win = max(64, int(fs * float(window_ms) / 1000.0))
+    x = x[-n_win:]
+    rms = float(np.sqrt(np.mean(np.square(x)))) if x.size else 0.0
+    if x.size < 32:
+        return np.zeros(0), np.zeros(0), None, rms
+
+    n_fft = 1 << int(np.ceil(np.log2(max(256, x.size))))
+    win = np.hanning(x.size).astype(np.float32)
+    spectrum = np.abs(np.fft.rfft(x * win, n=n_fft)).astype(np.float32)
+    freqs = np.fft.rfftfreq(n_fft, 1.0 / fs)
+    hi = min(float(fmax_hz) if fmax_hz else fs / 2.0, fs / 2.0)
+    lo = max(0.0, float(fmin_hz))
+    if lo >= hi:
+        lo = 0.0
+    mask = (freqs >= lo) & (freqs <= hi)
+    if not np.any(mask):
+        return np.zeros(0), np.zeros(0), None, rms
+
+    freqs_plot = freqs[mask].astype(np.float32)
+    amp = spectrum[mask]
+    peak_amp = float(np.max(amp)) if amp.size else 0.0
+    peak_hz = None
+    if peak_amp > EPS:
+        peak_idx = int(np.argmax(amp))
+        amp = (amp / peak_amp).astype(np.float32)
+        if rms >= min_rms:
+            peak_hz = float(freqs_plot[peak_idx])
+    return freqs_plot, amp.astype(np.float32), peak_hz, rms
+
+
 def fft_spectrum(data: np.ndarray, samplerate: int):
     return fft_spectrum_from_signal(data, samplerate)
 
@@ -142,6 +188,126 @@ def estimate_dominant_tone_hz(
     idx = int(np.argmax(mag[band]))
     peak = float(freqs[band][idx])
     return peak if peak > 0 else None
+
+
+def detect_impulses(
+    data: np.ndarray,
+    samplerate: int,
+    *,
+    threshold_db: float = -35.0,
+    min_duration_ms: float = 0.4,
+    merge_gap_ms: float = 1.5,
+    pre_pad_ms: float = 0.15,
+    post_pad_ms: float = 0.35,
+    envelope_ms: float = 0.35,
+    fmin_hz: float = 5000.0,
+    fmax_hz: float | None = None,
+    noise_factor: float = 6.0,
+) -> list[dict[str, float | int]]:
+    """
+    Размечает короткие импульсы по нормированной огибающей.
+
+    Порог считается относительно пика записи и дополнительно поднимается над
+    шумовой полкой по median/MAD, чтобы случайный фон не превращался в сотни меток.
+    """
+    x = remove_dc(as_mono(data))
+    fs = max(1, int(samplerate))
+    if x.size < 8:
+        return []
+
+    abs_x = np.abs(x).astype(np.float32)
+    win = max(1, int(fs * float(envelope_ms) / 1000.0))
+    if win > 1:
+        kernel = np.ones(win, dtype=np.float32) / win
+        env = np.convolve(abs_x, kernel, mode="same").astype(np.float32)
+    else:
+        env = abs_x
+    peak_env = float(np.max(env)) if env.size else 0.0
+    if peak_env <= EPS:
+        return []
+    env_norm = env / peak_env
+
+    fixed_threshold = 10.0 ** (float(threshold_db) / 20.0)
+    median = float(np.median(env_norm))
+    mad = float(np.median(np.abs(env_norm - median)))
+    adaptive_threshold = median + float(noise_factor) * 1.4826 * mad
+    threshold = min(0.85, max(fixed_threshold, adaptive_threshold))
+    active = env_norm >= threshold
+    if not np.any(active):
+        return []
+
+    edges = np.diff(np.concatenate(([0], active.astype(np.int8), [0])))
+    starts = np.flatnonzero(edges == 1)
+    ends = np.flatnonzero(edges == -1)
+    merge_gap = max(0, int(fs * float(merge_gap_ms) / 1000.0))
+    merged: list[tuple[int, int]] = []
+    for start, end in zip(starts, ends):
+        start_i, end_i = int(start), int(end)
+        if merged and start_i - merged[-1][1] <= merge_gap:
+            merged[-1] = (merged[-1][0], end_i)
+        else:
+            merged.append((start_i, end_i))
+
+    min_len = max(1, int(fs * float(min_duration_ms) / 1000.0))
+    pre = max(0, int(fs * float(pre_pad_ms) / 1000.0))
+    post = max(0, int(fs * float(post_pad_ms) / 1000.0))
+    hi_freq = min(float(fmax_hz) if fmax_hz else fs / 2.0, fs / 2.0)
+    impulses: list[dict[str, float | int]] = []
+    last_peak_s: float | None = None
+    for raw_start, raw_end in merged:
+        if raw_end - raw_start < min_len:
+            continue
+        start = max(0, raw_start - pre)
+        end = min(x.size, raw_end + post)
+        if end <= start:
+            continue
+        segment = x[start:end]
+        peak_rel = int(np.argmax(np.abs(segment)))
+        peak_i = start + peak_rel
+        rms = float(np.sqrt(np.mean(np.square(segment)))) if segment.size else 0.0
+        dom_hz = estimate_dominant_tone_hz(segment, fs, fmin_hz=fmin_hz, fmax_hz=hi_freq) or math.nan
+        peak_s = peak_i / fs
+        interval_ms = math.nan if last_peak_s is None else (peak_s - last_peak_s) * 1000.0
+        last_peak_s = peak_s
+        impulses.append(
+            {
+                "index": len(impulses) + 1,
+                "start_sample": start,
+                "end_sample": end,
+                "start_s": start / fs,
+                "end_s": end / fs,
+                "duration_ms": (end - start) / fs * 1000.0,
+                "peak_time_s": peak_s,
+                "peak_amplitude": float(np.max(np.abs(segment))) if segment.size else 0.0,
+                "rms": rms,
+                "dominant_freq_hz": dom_hz,
+                "interval_ms": interval_ms,
+                "threshold": threshold,
+            }
+        )
+    return impulses
+
+
+def save_impulses_csv(impulses: list[dict[str, float | int]], path: str | Path) -> None:
+    fieldnames = [
+        "index",
+        "start_s",
+        "end_s",
+        "duration_ms",
+        "peak_time_s",
+        "peak_amplitude",
+        "rms",
+        "dominant_freq_hz",
+        "interval_ms",
+        "start_sample",
+        "end_sample",
+        "threshold",
+    ]
+    with Path(path).open("w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter=";")
+        writer.writeheader()
+        for item in impulses:
+            writer.writerow({key: item.get(key, "") for key in fieldnames})
 
 
 def resolve_record_tone_hz(

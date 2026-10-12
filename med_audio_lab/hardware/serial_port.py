@@ -275,7 +275,8 @@ class SerialRecorder:
 
     def snapshot(self, max_samples: int | None = None) -> np.ndarray:
         with self._lock:
-            data = np.asarray(self._samples, dtype=np.float32)
-        if max_samples and data.size > max_samples:
-            return data[-max_samples:]
-        return data
+            if max_samples and max_samples > 0:
+                values = self._samples[-int(max_samples):]
+            else:
+                values = self._samples[:]
+            return np.asarray(values, dtype=np.float32)
