@@ -225,9 +225,40 @@ QComboBox QAbstractItemView {
     outline: none;
 }
 
+/* Sizing an indicator alone makes Qt stop drawing it, so style every state. */
 QCheckBox::indicator, QRadioButton::indicator {
     width: 14px;
     height: 14px;
+    background-color: #ffffff;
+    border: 2px solid #94a3b8;
+}
+
+QCheckBox::indicator {
+    border-radius: 4px;
+}
+
+QRadioButton::indicator {
+    border-radius: 9px;
+}
+
+QCheckBox::indicator:hover, QRadioButton::indicator:hover {
+    border-color: #2563eb;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #2563eb;
+    border-color: #2563eb;
+}
+
+QRadioButton::indicator:checked {
+    background-color: qradialgradient(cx: 0.5, cy: 0.5, radius: 0.5, fx: 0.5, fy: 0.5,
+        stop: 0 #2563eb, stop: 0.5 #2563eb, stop: 0.6 #ffffff, stop: 1 #ffffff);
+    border-color: #2563eb;
+}
+
+QCheckBox::indicator:disabled, QRadioButton::indicator:disabled {
+    background-color: #e2e8f0;
+    border-color: #cbd5e1;
 }
 
 /* ------------------------------------------------------- item views, header */
