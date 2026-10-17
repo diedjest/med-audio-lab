@@ -5,7 +5,7 @@
 This document presents the complete architectural redesign of MedAudioLab: a commercial-grade desktop application for recording, processing, and analyzing high-frequency audio and ultrasonic signals (up to 384+ kHz). The redesign replaces the Tkinter-based prototype with a PySide6/pyqtgraph stack, introduces strict layered architecture with dependency inversion, and resolves critical bottlenecks including UI freezes during CWT computation, memory leaks, and tight coupling between DSP and presentation.
 
 > [!IMPORTANT]
-> The legacy prototype ([app.py](file:///c:/Users/dmitriy/PythonProjects/med-audio-lab/med_audio_lab/gui/app.py) — 1794 lines in a single file) conflates recording state, DSP orchestration, UI layout, and persistence into one monolithic Tkinter class. This document specifies a clean decomposition into 5 layers with 30+ focused modules.
+> The legacy prototype (`med_audio_lab/gui/app.py` — 1794 lines in a single file; the package has since been removed and lives in git history) conflates recording state, DSP orchestration, UI layout, and persistence into one monolithic Tkinter class. This document specifies a clean decomposition into 5 layers with 30+ focused modules.
 
 ---
 
