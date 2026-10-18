@@ -384,14 +384,18 @@ class SpectrogramWidget(QWidget):
 
     Use :meth:`show_plot` with the ``(plot_type, payload)`` pair emitted by
     ``AnalysisViewModel.plot_ready``.  ``clicked(time_s, frequency_hz, button)`` is
-    emitted for clicks inside a heat map (button 1 = left, 2 = right).
+    emitted for clicks inside a heat map (button 1 = left, 2 = right), and
+    ``selection_edited(start_s, end_s)`` when the user drags the segment selection of
+    the waveform.
     """
 
     clicked = Signal(float, float, int)
+    selection_edited = Signal(float, float)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._waveform = WaveformWidget()
+        self._waveform.selection_edited.connect(self.selection_edited)
         self._plot = AnalysisPlot()
         self._stack = QStackedLayout(self)
         self._stack.setContentsMargins(0, 0, 0, 0)
@@ -458,6 +462,15 @@ class SpectrogramWidget(QWidget):
         handler(payload)
         self._kind = plot_type
 
+    def set_selection(self, start_s: float, end_s: float) -> None:
+        """Move the segment selection of the plain waveform (no-op for any other plot)."""
+        if self._kind == "waveform":
+            self._waveform.set_selection(start_s, end_s)
+
+    def clear_selection(self) -> None:
+        """Remove the segment selection from the waveform."""
+        self._waveform.clear_selection()
+
     def set_time_range(self, start_s: float, end_s: float) -> None:
         """Zoom a waveform-type plot to a time range."""
         if self._stack.currentWidget() is self._waveform:
@@ -487,6 +500,9 @@ class SpectrogramWidget(QWidget):
     # --------------------------------------------------- waveform-type plots
     def _show_waveform(self, payload: dict[str, Any]) -> None:
         self._waveform.set_data(payload["data"], payload["sample_rate"])
+        selection = payload.get("selection")
+        if selection is not None:
+            self._waveform.set_selection(*selection)
         self._stack.setCurrentWidget(self._waveform)
         self._title = "Waveform (filtered)" if payload.get("filtered") else "Waveform"
 

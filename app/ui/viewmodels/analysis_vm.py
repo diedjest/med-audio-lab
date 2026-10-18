@@ -3,7 +3,8 @@
 ``plot_ready(plot_type, payload)`` payloads (``payload`` is always a dict):
 
 ========================  ======================================================
-``"waveform"``            ``data``, ``sample_rate`` (+ ``filtered`` after a filter)
+``"waveform"``            ``data``, ``sample_rate``, ``selection`` ((start_s, end_s) or None),
+                          ``filtered``
 ``"fft"``                 ``freqs_hz``, ``magnitudes``, ``peak_hz``, ``peak_magnitude``,
                           ``sample_rate``
 ``"psd"``                 ``freqs_hz``, ``psd`` (V^2/Hz), ``sample_rate``
@@ -15,6 +16,10 @@
 ``"autocorrelation"``     ``lags_ms``, ``correlation``
 ``"wavelet_slice"``       ``time_rel_s``, ``values``, ``frequency_hz`` (the row used)
 ========================  ======================================================
+
+While a segment is selected (:meth:`AnalysisViewModel.set_selection`) every
+analysis payload except ``"waveform"`` describes the segment only: its time axis
+starts at 0 at the segment start.  The waveform always shows the whole signal.
 """
 
 from __future__ import annotations
@@ -60,6 +65,11 @@ class AnalysisViewModel(QObject):
     ``current_data``, ``current_sample_rate``, ``current_metrics``,
     ``current_impulses``, ``cwt_result`` and ``is_busy``.
 
+    A segment of the signal can be selected with :meth:`set_selection`; all analyses
+    (and ``current_metrics`` / ``current_impulses``) then use that segment only, until
+    :meth:`clear_selection` goes back to the full signal.  Filtering still acts on the
+    whole signal.  ``analysis_data`` is the samples being analysed.
+
     Load a signal with :meth:`load_signal`; the ``show_*`` slots then compute and
     announce results through ``plot_ready``.  Per-analysis parameters are set with
     :meth:`set_options`.  Only this view model's own requests are reported: results
@@ -72,6 +82,7 @@ class AnalysisViewModel(QObject):
     current_metrics_changed = Signal()
     current_impulses_changed = Signal()
     cwt_result_changed = Signal()
+    selection_changed = Signal()
     is_busy_changed = Signal(bool)
 
     plot_ready = Signal(str, object)  # (plot_type, payload dict)
@@ -84,6 +95,7 @@ class AnalysisViewModel(QObject):
         self._service = service
         self._data = np.zeros(0, dtype=np.float32)
         self._original: np.ndarray | None = None
+        self._selection: tuple[int, int] | None = None  # sample indices [start, end)
         self._fs = 0
         self._metrics: SignalMetrics | None = None
         self._impulses: list[DetectedImpulse] = []
@@ -126,6 +138,20 @@ class AnalysisViewModel(QObject):
     @Property(bool, notify=is_busy_changed)
     def is_busy(self) -> bool:
         return self._busy
+
+    @property
+    def selection(self) -> tuple[float, float] | None:
+        """The selected segment as ``(start_s, end_s)``; None when the full signal is analysed."""
+        if self._selection is None:
+            return None
+        return self._selection[0] / self._fs, self._selection[1] / self._fs
+
+    @property
+    def analysis_data(self) -> np.ndarray:
+        """The samples the analyses run on: the selected segment, else the whole signal."""
+        if self._selection is None:
+            return self._data
+        return self._data[self._selection[0] : self._selection[1]]
 
     @property
     def has_original(self) -> bool:
@@ -171,6 +197,10 @@ class AnalysisViewModel(QObject):
         self.current_data_changed.emit()
         if rate_changed:
             self.current_sample_rate_changed.emit(fs)
+        self._invalidate_results()
+
+    def _invalidate_results(self) -> None:
+        """Drop metrics, impulses and the CWT: they belong to a different input."""
         if self._metrics is not None:
             self._metrics = None
             self.current_metrics_changed.emit()
@@ -213,8 +243,52 @@ class AnalysisViewModel(QObject):
         self._original = None
         self._auto_metrics = bool(compute_metrics)
         self._service.cancel()
+        had_selection, self._selection = self._selection is not None, None
         self._replace_data(signal, fs)
+        if had_selection:
+            self.selection_changed.emit()
         self._maybe_request_metrics()
+
+    # ------------------------------------------------------------ selection
+    def set_selection(self, start_s: float, end_s: float) -> None:
+        """Restrict all analyses to the segment ``[start_s, end_s]`` of the current signal.
+
+        The bounds are clamped to the signal and rounded to samples.  A segment that
+        covers the whole signal is the same as :meth:`clear_selection`.  Running
+        analyses are cancelled and every derived result is cleared.
+
+        Raises:
+            ValueError: no signal, or fewer than two samples between the bounds.
+        """
+        if self._data.size == 0 or self._fs <= 0:
+            raise ValueError("No signal loaded.")
+        lo, hi = sorted((float(start_s), float(end_s)))
+        first = min(self._data.size, max(0, int(round(lo * self._fs))))
+        last = min(self._data.size, max(0, int(round(hi * self._fs))))
+        if last - first < 2:
+            raise ValueError("The selected segment must contain at least two samples.")
+        self._apply_selection(None if (first, last) == (0, self._data.size) else (first, last))
+
+    @Slot()
+    def clear_selection(self) -> None:
+        """Go back to analysing the full signal."""
+        self._apply_selection(None)
+
+    def _apply_selection(self, new: tuple[int, int] | None) -> None:
+        if new == self._selection:
+            return
+        self._selection = new
+        self._generation += 1
+        self._pending = None
+        self._service.cancel()
+        self._metrics_failed = False
+        self._invalidate_results()
+        self.selection_changed.emit()
+        self._maybe_request_metrics()
+
+    def selected_segment(self) -> np.ndarray:
+        """A copy of the analysed samples (the selection, else the whole signal)."""
+        return np.array(self.analysis_data, copy=True)
 
     @Slot()
     def cancel_analysis(self) -> None:
@@ -231,8 +305,11 @@ class AnalysisViewModel(QObject):
         self._service.cancel()
         original, self._original = self._original, None
         self._replace_data(original, self._fs)
-        self.plot_ready.emit("waveform", {"data": original, "sample_rate": self._fs, "filtered": False})
+        self.plot_ready.emit("waveform", self._waveform_payload(original, filtered=False))
         self._maybe_request_metrics()
+
+    def _waveform_payload(self, data: np.ndarray, *, filtered: bool) -> dict[str, Any]:
+        return {"data": data, "sample_rate": self._fs, "selection": self.selection, "filtered": filtered}
 
     # ------------------------------------------------------------ requests
     def _require_data(self, kind: str) -> bool:
@@ -261,7 +338,7 @@ class AnalysisViewModel(QObject):
             and self._pending is None
             and not self._service.is_busy
         ):
-            data, fs = self._data, self._fs
+            data, fs = self.analysis_data, self._fs
             self._request("metrics", lambda: self._service.compute_metrics(data, fs))
 
     # --------------------------------------------------------------- slots
@@ -270,8 +347,7 @@ class AnalysisViewModel(QObject):
         """Announce the current signal for the waveform plot."""
         if self._require_data("waveform"):
             self.plot_ready.emit(
-                "waveform",
-                {"data": self._data, "sample_rate": self._fs, "filtered": self._original is not None},
+                "waveform", self._waveform_payload(self._data, filtered=self._original is not None)
             )
 
     @Slot()
@@ -279,26 +355,26 @@ class AnalysisViewModel(QObject):
         """(Re)compute ``current_metrics`` in the background."""
         if self._require_data("metrics"):
             self._metrics_failed = False
-            data, fs = self._data, self._fs
+            data, fs = self.analysis_data, self._fs
             self._request("metrics", lambda: self._service.compute_metrics(data, fs))
 
     @Slot()
     def show_fft(self) -> None:
         if self._require_data("fft"):
-            data, fs, opts = self._data, self._fs, self.options("fft")
+            data, fs, opts = self.analysis_data, self._fs, self.options("fft")
             self._request("fft", lambda: self._service.compute_fft(data, fs, **opts), options=opts)
 
     @Slot()
     def show_psd(self) -> None:
         """Welch power spectral density of the current signal."""
         if self._require_data("psd"):
-            data, fs, opts = self._data, self._fs, self.options("psd")
+            data, fs, opts = self.analysis_data, self._fs, self.options("psd")
             self._request("psd", lambda: self._service.compute_psd(data, fs, **opts))
 
     @Slot()
     def show_stft(self) -> None:
         if self._require_data("stft"):
-            data, fs, opts = self._data, self._fs, self.options("stft")
+            data, fs, opts = self.analysis_data, self._fs, self.options("stft")
             self._request("stft", lambda: self._service.compute_stft(data, fs, **opts))
 
     @Slot()
@@ -306,7 +382,7 @@ class AnalysisViewModel(QObject):
         """CWT of the current signal; truncated automatically if it would not fit in memory."""
         if not self._require_data("cwt"):
             return
-        data, fs = self._data, self._fs
+        data, fs = self.analysis_data, self._fs
         opts = {"fmax_hz": min(_CWT_DEFAULT_FMAX_HZ, fs / 2.0)}
         opts.update(self._options["cwt"])
         try:
@@ -339,20 +415,20 @@ class AnalysisViewModel(QObject):
     @Slot()
     def show_envelope(self) -> None:
         if self._require_data("envelope"):
-            data, fs, opts = self._data, self._fs, self.options("envelope")
+            data, fs, opts = self.analysis_data, self._fs, self.options("envelope")
             self._request("envelope", lambda: self._service.compute_envelope(data, fs, **opts))
 
     @Slot()
     def show_impulses(self) -> None:
         if self._require_data("impulses"):
-            data, fs = self._data, self._fs
+            data, fs = self.analysis_data, self._fs
             config: ImpulseDetectorConfig | None = self._options["impulses"].get("config")
             self._request("impulses", lambda: self._service.detect_impulses(data, fs, config))
 
     @Slot()
     def show_autocorrelation(self) -> None:
         if self._require_data("autocorrelation"):
-            data, fs, opts = self._data, self._fs, self.options("autocorrelation")
+            data, fs, opts = self.analysis_data, self._fs, self.options("autocorrelation")
             self._request(
                 "autocorrelation", lambda: self._service.compute_autocorrelation(data, fs, **opts)
             )
@@ -476,14 +552,14 @@ class AnalysisViewModel(QObject):
 
     def _done_envelope(self, result: np.ndarray, pending: _Pending) -> None:
         self.plot_ready.emit(
-            "envelope", {"data": result, "signal": self._data, "sample_rate": self._fs}
+            "envelope", {"data": result, "signal": self.analysis_data, "sample_rate": self._fs}
         )
 
     def _done_impulses(self, result: list[DetectedImpulse], pending: _Pending) -> None:
         self._impulses = list(result)
         self.current_impulses_changed.emit()
         self.plot_ready.emit(
-            "impulses", {"impulses": self._impulses, "data": self._data, "sample_rate": self._fs}
+            "impulses", {"impulses": self._impulses, "data": self.analysis_data, "sample_rate": self._fs}
         )
 
     def _done_autocorrelation(
@@ -498,7 +574,7 @@ class AnalysisViewModel(QObject):
         self._generation += 1  # anything still derived from the unfiltered signal is stale
         filtered = np.asarray(result, dtype=np.float32)
         self._replace_data(filtered, self._fs)
-        self.plot_ready.emit("waveform", {"data": filtered, "sample_rate": self._fs, "filtered": True})
+        self.plot_ready.emit("waveform", self._waveform_payload(filtered, filtered=True))
 
 
 __all__: list[str] = ["AnalysisViewModel"]

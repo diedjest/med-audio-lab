@@ -303,6 +303,9 @@ class MainWindow(QMainWindow):
         self._export_png_action = self._action(export_menu, "Current plot as &PNG...", self.export_plot_png)
         self._export_wav_action = self._action(export_menu, "Signal as &WAV...", self.export_signal_wav)
         self._export_csv_action = self._action(export_menu, "Signal as &CSV...", self.export_signal_csv)
+        self._export_segment_action = self._action(
+            export_menu, "Selected &segment as WAV...", self.export_segment_wav
+        )
         self._export_impulses_action = self._action(
             export_menu, "Detected &impulses as CSV...", self.export_impulses_csv
         )
@@ -348,6 +351,7 @@ class MainWindow(QMainWindow):
         lib.is_loading_changed.connect(self._refresh_state)
         for signal_ in (
             ana.current_data_changed,
+            ana.selection_changed,
             ana.current_impulses_changed,
         ):
             signal_.connect(self._refresh_state)
@@ -385,6 +389,7 @@ class MainWindow(QMainWindow):
         has_signal = ana.current_data.size > 0
         for action in (self._save_action, self._export_png_action, self._export_wav_action, self._export_csv_action):
             action.setEnabled(has_signal)
+        self._export_segment_action.setEnabled(ana.selection is not None)
         self._export_impulses_action.setEnabled(bool(ana.current_impulses))
         self._settings_action.setEnabled(not rec.is_recording)
 
@@ -494,6 +499,10 @@ class MainWindow(QMainWindow):
             self._show_info("Plot exported.")
         elif path is not None:
             self._show_error("The plot could not be exported.")
+
+    def export_segment_wav(self, path: str | Path | None = None) -> None:
+        """File > Export > Selected segment as WAV."""
+        self._analysis_tab.export_segment_wav(path)
 
     def export_impulses_csv(self, path: str | Path | None = None) -> None:
         """File > Export > Detected impulses as CSV."""

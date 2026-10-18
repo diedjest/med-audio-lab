@@ -6,11 +6,16 @@ Layout::
     [Waveform][FFT][PSD][Spectrogram (STFT)][Wavelet (CWT)][Wavelet Slice]
     [Autocorrelation][Envelope][Impulses]
     +----------------------------------------+---------------------+
-    | header                    [Back to CWT]| Metrics             |
+    | header                    [Back to CWT]| Segment             |
+    |                                        | Metrics             |
     | SpectrogramWidget (any analysis)       | Impulse detection   |
     |                                        | Filter              |
     | status                                 | CWT controls        |
     +----------------------------------------+---------------------+
+
+Segment: drag the shaded span on the waveform (or type its bounds in the "Segment"
+box) to restrict every analysis to that part of the signal; "Full signal" goes back and
+"Save segment" writes it to a WAV file.
 
 Clicking a heat map reads off slices (ported from the legacy ``_on_spectrogram_click``):
 
@@ -203,6 +208,7 @@ class AnalysisTab(QWidget):
         self._active_loader: AnalysisWorker | None = None
         self._workers: set[Any] = set()
         self._loading = False
+        self._updating_segment = False
 
         self.setStyleSheet(_STYLE)
         root = QVBoxLayout(self)
@@ -294,6 +300,7 @@ class AnalysisTab(QWidget):
         layout = QVBoxLayout(content)
         layout.setContentsMargins(0, 0, 6, 0)
         layout.setSpacing(10)
+        layout.addWidget(self._build_segment_group())
         layout.addWidget(self._build_metrics_group())
         layout.addWidget(self._build_impulse_group())
         layout.addWidget(self._build_filter_group())
@@ -309,8 +316,47 @@ class AnalysisTab(QWidget):
         self._sidebar = scroll
         return scroll
 
+    def _build_segment_group(self) -> QGroupBox:
+        group = QGroupBox("Segment")
+        box = QVBoxLayout(group)
+
+        def time_spin() -> QDoubleSpinBox:
+            spin = QDoubleSpinBox()
+            spin.setDecimals(6)
+            spin.setSingleStep(0.01)
+            spin.setSuffix(" s")
+            spin.setKeyboardTracking(False)
+            return spin
+
+        self._segment_start = time_spin()
+        self._segment_end = time_spin()
+        grid = QGridLayout()
+        grid.addWidget(QLabel("Start"), 0, 0)
+        grid.addWidget(self._segment_start, 0, 1)
+        grid.addWidget(QLabel("End"), 1, 0)
+        grid.addWidget(self._segment_end, 1, 1)
+        box.addLayout(grid)
+
+        buttons = QHBoxLayout()
+        self._select_button = QPushButton("Select")
+        self._select_button.setObjectName("primary")
+        self._select_button.setToolTip("Select a segment: drag its edges on the waveform or type the bounds")
+        self._full_button = QPushButton("Full signal")
+        self._full_button.setToolTip("Analyse the whole signal again")
+        self._save_segment_button = QPushButton("Save segment")
+        self._save_segment_button.setToolTip("Save the selected segment as a WAV file")
+        buttons.addWidget(self._select_button, 1)
+        buttons.addWidget(self._full_button, 1)
+        buttons.addWidget(self._save_segment_button, 1)
+        box.addLayout(buttons)
+
+        self._segment_hint = _muted()
+        box.addWidget(self._segment_hint)
+        return group
+
     def _build_metrics_group(self) -> QGroupBox:
         group = QGroupBox("Metrics")
+        self._metrics_group = group
         box = QVBoxLayout(group)
         self._metrics_tree = QTreeWidget()
         self._metrics_tree.setColumnCount(2)
@@ -478,6 +524,13 @@ class AnalysisTab(QWidget):
 
         self._display.clicked.connect(self._on_display_clicked)
 
+        self._select_button.clicked.connect(lambda _c=False: self.select_segment())
+        self._full_button.clicked.connect(lambda _c=False: vm.clear_selection())
+        self._save_segment_button.clicked.connect(lambda _c=False: self.export_segment_wav())
+        self._segment_start.editingFinished.connect(self._on_segment_edited)
+        self._segment_end.editingFinished.connect(self._on_segment_edited)
+        self._display.selection_edited.connect(self._on_selection_dragged)
+
     def _connect_view_model(self) -> None:
         vm = self._vm
         vm.current_data_changed.connect(self._refresh_all)
@@ -485,6 +538,7 @@ class AnalysisTab(QWidget):
         vm.current_metrics_changed.connect(self._refresh_metrics)
         vm.current_impulses_changed.connect(self._refresh_impulses)
         vm.cwt_result_changed.connect(self._update_controls)
+        vm.selection_changed.connect(self._on_selection_changed)
         vm.is_busy_changed.connect(self._on_busy_changed)
         vm.plot_ready.connect(self._on_plot_ready)
         vm.analysis_progress.connect(self._on_progress)
@@ -504,6 +558,7 @@ class AnalysisTab(QWidget):
 
     def _refresh_all(self) -> None:
         self._refresh_header()
+        self._refresh_segment()
         self._refresh_metrics()
         self._refresh_impulses()
         self._update_controls()
@@ -516,7 +571,10 @@ class AnalysisTab(QWidget):
         duration = vm.current_data.size / max(1, vm.current_sample_rate)
         name = f"{self._label} - " if self._label else ""
         filtered = " (filtered)" if vm.has_original else ""
-        self._header.setText(f"{name}{duration:.3f} s at {vm.current_sample_rate} Hz{filtered}")
+        segment = ""
+        if vm.selection is not None:
+            segment = f" - segment {vm.selection[0]:.3f}-{vm.selection[1]:.3f} s"
+        self._header.setText(f"{name}{duration:.3f} s at {vm.current_sample_rate} Hz{filtered}{segment}")
 
     def _update_controls(self, *_: object) -> None:
         vm = self._vm
@@ -529,6 +587,10 @@ class AnalysisTab(QWidget):
         self._detect_button.setEnabled(has_data)
         self._export_impulses_button.setEnabled(bool(vm.current_impulses))
         self._apply_filter_button.setEnabled(has_data)
+        for widget in (self._select_button, self._segment_start, self._segment_end):
+            widget.setEnabled(has_data)
+        self._full_button.setEnabled(vm.selection is not None)
+        self._save_segment_button.setEnabled(vm.selection is not None)
         self._restore_button.setEnabled(vm.has_original)
         self._load_button.setEnabled(not self._loading)
         self._txt_button.setEnabled(not self._loading)
@@ -547,6 +609,113 @@ class AnalysisTab(QWidget):
 
     def _on_analysis_error(self, kind: str, message: str) -> None:
         self._report(f"{kind}: {message}")
+
+    # ================================================================= segment
+    def _refresh_segment(self) -> None:
+        """Sync the bounds boxes, the hint and the metrics title with the selection."""
+        vm = self._vm
+        duration = vm.current_data.size / max(1, vm.current_sample_rate)
+        start, end = vm.selection if vm.selection is not None else (0.0, duration)
+        self._updating_segment = True
+        try:
+            for spin in (self._segment_start, self._segment_end):
+                spin.setRange(0.0, duration)
+            self._segment_start.setValue(start)
+            self._segment_end.setValue(end)
+        finally:
+            self._updating_segment = False
+        if vm.selection is None:
+            self._segment_hint.setText("Analysing the full signal.")
+            self._metrics_group.setTitle("Metrics")
+        else:
+            self._segment_hint.setText(
+                f"Analysing {end - start:.6f} s of the signal. Times in the analysis plots "
+                "are measured from the segment start."
+            )
+            self._metrics_group.setTitle("Metrics (segment)")
+
+    def select_segment(self, start_s: float | None = None, end_s: float | None = None) -> None:
+        """Restrict the analysis to ``[start_s, end_s]`` and show it on the waveform.
+
+        Without bounds the middle half of the visible waveform is selected (the whole
+        signal if another plot is shown); the user then adjusts it by dragging its edges.
+        """
+        vm = self._vm
+        if vm.current_data.size == 0:
+            self._report("Load or record a signal first.")
+            return
+        if self._display.kind != "waveform":
+            vm.show_waveform()
+        if start_s is None or end_s is None:
+            first, last = self._display.waveform_widget.view_range()
+            duration = vm.current_data.size / max(1, vm.current_sample_rate)
+            first, last = max(0.0, first), min(duration, last)
+            start_s, end_s = first + (last - first) / 4.0, last - (last - first) / 4.0
+        self._set_selection(start_s, end_s)
+
+    def _set_selection(self, start_s: float, end_s: float) -> None:
+        try:
+            self._vm.set_selection(start_s, end_s)
+        except ValueError as exc:
+            self._report(str(exc))
+            self._refresh_segment()  # put the previous bounds back
+            if self._vm.selection is not None and self._display.kind == "waveform":
+                self._display.set_selection(*self._vm.selection)
+
+    def _on_segment_edited(self) -> None:
+        if not self._updating_segment:
+            self._set_selection(self._segment_start.value(), self._segment_end.value())
+
+    def _on_selection_dragged(self, start_s: float, end_s: float) -> None:
+        self._set_selection(start_s, end_s)
+
+    def _on_selection_changed(self) -> None:
+        selection = self._vm.selection
+        self._last_cwt_payload = None  # belongs to the previous input
+        self._back_button.hide()
+        if self._display.kind == "waveform":
+            if selection is None:
+                self._display.clear_selection()
+            else:
+                self._display.set_selection(*selection)
+            self._show_status("Full signal" if selection is None else "Segment selected")
+        elif self._display.kind != "empty":
+            self._show_status("Selection changed - run the analysis again.")
+        self._refresh_header()
+        self._refresh_segment()
+        self._update_controls()
+
+    def export_segment_wav(self, path: str | Path | None = None) -> None:
+        """Save the selected segment as a WAV file (a save dialog is shown if ``path`` is None).
+
+        The bit depth comes from the settings; a segment above full scale is written as
+        32-bit float so that nothing is clipped.
+        """
+        vm = self._vm
+        selection = vm.selection
+        if selection is None:
+            self._report("There is no selected segment to save. Use 'Select' first.")
+            return
+        samples = vm.selected_segment()
+        rate = vm.current_sample_rate
+        if path is None:
+            stem = Path(self._label).stem if self._label else "signal"
+            suggested = f"{stem}_{selection[0]:.3f}-{selection[1]:.3f}s.wav"
+            chosen, _ = QFileDialog.getSaveFileName(
+                self, "Save segment as WAV", str(self._settings.save_directory / suggested), "WAV (*.wav)"
+            )
+            if not chosen:
+                return
+            path = chosen
+        target = Path(path).with_suffix(".wav")
+        peak = float(np.max(np.abs(samples)))
+        subtype = self._settings.wav_bit_depth if peak <= 1.0001 else "FLOAT_32"
+
+        def job() -> Path:
+            file_io.save_wav(samples, rate, target, subtype)
+            return target
+
+        self._run_export(job, "Segment saved: {}")
 
     # ================================================================= metrics
     def _refresh_metrics(self) -> None:
@@ -604,7 +773,7 @@ class AnalysisTab(QWidget):
         if self._display.kind != "impulses":
             self._display.show_plot(
                 "impulses",
-                {"impulses": vm.current_impulses, "data": vm.current_data, "sample_rate": vm.current_sample_rate},
+                {"impulses": vm.current_impulses, "data": vm.analysis_data, "sample_rate": vm.current_sample_rate},
             )
             self._back_button.hide()
         pad = max(_IMPULSE_FOCUS_PAD_S, 2.0 * (impulse.end_s - impulse.start_s))

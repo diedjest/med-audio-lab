@@ -8,6 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import pyqtgraph as pg
+from PySide6.QtCore import Signal
 from PySide6.QtGui import QColor, QContextMenuEvent, QResizeEvent
 from PySide6.QtWidgets import QFileDialog, QMenu, QWidget
 
@@ -80,7 +81,11 @@ class WaveformWidget(PlotWidgetBase):
       for 60 FPS updates.
     * Wheel zooms the time axis, dragging pans it, right-click offers
       "Reset Zoom" and "Export PNG".
+    * :meth:`set_selection` shows a segment as a shaded span whose edges the user can
+      drag; ``selection_edited(start_s, end_s)`` is emitted when a drag ends.
     """
+
+    selection_edited = Signal(float, float)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__("Time (s)", "Amplitude", parent)
@@ -106,6 +111,7 @@ class WaveformWidget(PlotWidgetBase):
         self._ov_pmax: np.ndarray | None = None
         self._ov_curve: pg.PlotDataItem | None = None
         self._regions: list[pg.LinearRegionItem] = []
+        self._selection: pg.LinearRegionItem | None = None
 
         self._vb.sigXRangeChanged.connect(self._on_x_range_changed)
         self.clear("No data")
@@ -147,6 +153,7 @@ class WaveformWidget(PlotWidgetBase):
 
         self.clear_overlay()
         self.clear_regions()
+        self.clear_selection()
         self._mode = "static"
         self._y = y
         self._sr = int(sample_rate)
@@ -276,6 +283,53 @@ class WaveformWidget(PlotWidgetBase):
             self._plot.getPlotItem().removeItem(region)
         self._regions.clear()
 
+    # ------------------------------------------------------------ selection
+    @property
+    def selection(self) -> tuple[float, float] | None:
+        """The selected span ``(start_s, end_s)``, or None."""
+        if self._selection is None:
+            return None
+        start, end = self._selection.getRegion()
+        return float(start), float(end)
+
+    def set_selection(self, start_s: float, end_s: float) -> None:
+        """Show (or move) the draggable selection span; does not emit ``selection_edited``.
+
+        Raises:
+            RuntimeError: no static waveform is displayed.
+        """
+        if self._mode != "static" or self._y is None:
+            raise RuntimeError("set_selection() needs a static waveform; call set_data() first")
+        values = (float(min(start_s, end_s)), float(max(start_s, end_s)))
+        if self._selection is None:
+            shade = QColor(COLOR_PEAK)
+            shade.setAlpha(45)
+            region = pg.LinearRegionItem(
+                values=values,
+                brush=pg.mkBrush(shade),
+                pen=pg.mkPen(COLOR_PEAK, width=1.5),
+                bounds=(0.0, self._y.size / self._sr),
+            )
+            region.setZValue(-5)
+            region.sigRegionChangeFinished.connect(self._on_selection_dragged)
+            self._plot.getPlotItem().addItem(region, ignoreBounds=True)
+            self._selection = region
+        else:
+            self._selection.blockSignals(True)
+            self._selection.setRegion(values)
+            self._selection.blockSignals(False)
+
+    def clear_selection(self) -> None:
+        """Remove the selection span."""
+        if self._selection is not None:
+            self._plot.getPlotItem().removeItem(self._selection)
+            self._selection = None
+
+    def _on_selection_dragged(self) -> None:
+        selection = self.selection
+        if selection is not None:
+            self.selection_edited.emit(*selection)
+
     def set_time_range(self, start_s: float, end_s: float) -> None:
         """Zoom the time axis to ``[start_s, end_s]`` (clamped to the waveform)."""
         if self._mode == "empty" or end_s <= start_s:
@@ -306,6 +360,7 @@ class WaveformWidget(PlotWidgetBase):
         if self._mode != "live":
             self.clear_overlay()
             self.clear_regions()
+            self.clear_selection()
             self._mode = "live"
             self._y = self._pyr_min = self._pyr_max = None
             self._live_key = self._live_span = None
@@ -342,6 +397,7 @@ class WaveformWidget(PlotWidgetBase):
         """Remove the waveform and show ``message`` as a placeholder."""
         self.clear_overlay()
         self.clear_regions()
+        self.clear_selection()
         self._mode = "empty"
         self._y = self._pyr_min = self._pyr_max = None
         self._live_key = self._live_x = self._live_span = None
