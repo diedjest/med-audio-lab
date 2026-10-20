@@ -12,7 +12,7 @@ from PySide6.QtCore import Signal
 from PySide6.QtGui import QColor, QContextMenuEvent, QResizeEvent
 from PySide6.QtWidgets import QFileDialog, QMenu, QWidget
 
-from app.ui.widgets._plot_base import COLOR_PEAK, COLOR_WAVEFORM, PlotWidgetBase, finite_float32
+from app.ui.widgets._plot_base import COLOR_PEAK, COLOR_WAVEFORM, PlotWidgetBase, finite_float32, nearest_index
 
 #: Hard cap: more visible samples than this are always reduced to min/max pairs.
 RAW_POINT_LIMIT: int = 100_000
@@ -405,6 +405,24 @@ class WaveformWidget(PlotWidgetBase):
         self._vb.setLimits(xMin=None, xMax=None, minXRange=None)
         self._vb.setXRange(0.0, 1.0, padding=0)
         self._show_placeholder(message)
+
+    # --------------------------------------------------------------- hover
+    def _hover_text(self, x: float, y: float) -> str | None:
+        if self._mode == "static" and self._y is not None:
+            if not 0.0 <= x <= self._y.size / self._sr:
+                return None
+            i = min(int(round(x * self._sr)), self._y.size - 1)
+            lines = [f"Time: {i / self._sr:.6f} s", f"Amplitude: {self._y[i]:+.5f}"]
+            if self._ov_y is not None and i < self._ov_y.size:
+                lines.append(f"Envelope: {self._ov_y[i]:+.5f}")
+            return "\n".join(lines)
+        if self._mode == "live":
+            xs, ys = self._curve.getData()
+            if xs is None or xs.size == 0:
+                return None
+            i = nearest_index(xs, x)
+            return f"Time: {xs[i]:.4f} s\nAmplitude: {ys[i]:+.5f}"
+        return None
 
     # -------------------------------------------------- zoom / export / menu
     def reset_zoom(self) -> None:

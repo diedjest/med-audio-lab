@@ -29,6 +29,7 @@ from app.ui.widgets._plot_base import (
     GRID_ALPHA,
     PlotWidgetBase,
     finite_float32,
+    nearest_index,
 )
 from app.ui.widgets.waveform_widget import WaveformWidget
 
@@ -176,6 +177,10 @@ class AnalysisPlot(PlotWidgetBase):
 
         self._mode = "empty"  # "empty" | "xy" | "image"
         self._log_freq = False
+        self._xy_data: tuple[np.ndarray, np.ndarray, bool] | None = None
+        self._image_info: tuple[tuple[float, float], tuple[float, float], str] | None = None
+        self._x_label = ""
+        self._y_label = ""
         self._spectrum: _SpectrumData | None = None
         self._plot.scene().sigMouseClicked.connect(self._on_scene_clicked)
         self.clear("No data")
@@ -218,6 +223,7 @@ class AnalysisPlot(PlotWidgetBase):
             self._spectrum = None
 
     def _decorate(self, title: str, x_label: str, y_label: str, note: str) -> None:
+        self._x_label, self._y_label = x_label, y_label
         self._item.setTitle(title, color=COLOR_AXIS)
         self._item.setLabel("bottom", x_label, color=COLOR_AXIS)
         self._item.setLabel("left", y_label, color=COLOR_AXIS)
@@ -266,6 +272,7 @@ class AnalysisPlot(PlotWidgetBase):
         self._clear_extras()
         self._set_mode("xy")
         self._decorate(title, x_label, y_label, note)
+        self._xy_data = (xs, ys, log_x)
         self._item.setLogMode(x=log_x, y=False)
         self._curve.setPen(pg.mkPen(color, width=1.5))
         self._curve.setData(xs, ys)
@@ -322,6 +329,7 @@ class AnalysisPlot(PlotWidgetBase):
         t0, t1 = t_range
         f0, f1 = f_range
         y0, y1 = (math.log10(f0), math.log10(f1)) if log_freq else (f0, f1)
+        self._image_info = ((t0, t1), (y0, y1), colorbar_label)
         self._image.setImage(z.T, autoLevels=False, levels=levels)
         self._image.setRect(QRectF(t0, y0, t1 - t0, y1 - y0))
 
@@ -337,6 +345,37 @@ class AnalysisPlot(PlotWidgetBase):
             colorbar_axis.setLabel(colorbar_label)
         self._vb.setLimits(xMin=t0, xMax=t1, yMin=y0, yMax=y1)
         self._vb.setRange(xRange=(t0, t1), yRange=(y0, y1), padding=0)
+
+    # --------------------------------------------------------------- hover
+    def _hover_crosshair(self) -> bool:
+        return self._mode == "xy"
+
+    def _hover_text(self, x: float, y: float) -> str | None:
+        if self._mode == "xy" and self._xy_data is not None:
+            xs, ys, log_x = self._xy_data
+            if log_x:
+                valid = xs > 0
+                xs, ys = xs[valid], ys[valid]
+                if xs.size == 0:
+                    return None
+                x = 10.0**x
+            order = np.argsort(xs)
+            xs, ys = xs[order], ys[order]
+            i = nearest_index(xs, x)
+            return f"{self._x_label}: {xs[i]:.6g}\n{self._y_label}: {ys[i]:.6g}"
+        if self._mode == "image" and self._image_info is not None:
+            (t0, t1), (y0, y1), value_label = self._image_info
+            data = self._image.image  # (n_times, n_rows)
+            if data is None or not (t0 <= x <= t1 and y0 <= y <= y1):
+                return None
+            ti = min(int((x - t0) / (t1 - t0) * data.shape[0]), data.shape[0] - 1)
+            fi = min(int((y - y0) / (y1 - y0) * data.shape[1]), data.shape[1] - 1)
+            frequency = 10.0**y if self._log_freq else y
+            return (
+                f"Time: {x:.4f} s\nFrequency: {frequency:.1f} Hz"
+                f"\n{value_label}: {data[ti, fi]:.1f}"
+            )
+        return None
 
     # ----------------------------------------------------------- clicking
     def _on_scene_clicked(self, event: Any) -> None:

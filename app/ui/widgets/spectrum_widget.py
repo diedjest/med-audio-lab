@@ -9,7 +9,7 @@ import pyqtgraph as pg
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
 
-from app.ui.widgets._plot_base import COLOR_PEAK, COLOR_SPECTRUM, PlotWidgetBase, finite_float32
+from app.ui.widgets._plot_base import COLOR_PEAK, COLOR_SPECTRUM, PlotWidgetBase, finite_float32, nearest_index
 
 _TEXT_Y_FRACTION = 0.96  # height of the peak label as a fraction of the y range
 _Y_HEADROOM = 1.15
@@ -36,6 +36,8 @@ class SpectrumWidget(PlotWidgetBase):
         self._peak_label.hide()
 
         self._x_span: tuple[float, float, int] | None = None
+        self._khz: np.ndarray | None = None
+        self._mags: np.ndarray | None = None
         self.clear("No signal")
 
     # ------------------------------------------------------------- state
@@ -84,6 +86,7 @@ class SpectrumWidget(PlotWidgetBase):
         self._hide_placeholder()
         khz = freqs / 1000.0
         self._curve.setData(khz, mags, skipFiniteCheck=True)
+        self._khz, self._mags = khz, mags
 
         span = (float(khz[0]), float(khz[-1]), khz.size)
         if span != self._x_span:
@@ -115,9 +118,17 @@ class SpectrumWidget(PlotWidgetBase):
         self._peak_line.hide()
         self._peak_label.hide()
         self._x_span = None
+        self._khz = self._mags = None
         self._vb.setXRange(0.0, 1.0, padding=0)
         self._vb.setYRange(0.0, 1.0, padding=0)
         self._show_placeholder(message)
+
+    # --------------------------------------------------------------- hover
+    def _hover_text(self, x: float, y: float) -> str | None:
+        if self._khz is None or self._mags is None:
+            return None
+        i = nearest_index(self._khz, x)
+        return f"Frequency: {self._khz[i]:.3f} kHz\nMagnitude: {self._mags[i]:.4g}"
 
 
 __all__: list[str] = ["SpectrumWidget"]

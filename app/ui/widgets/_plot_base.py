@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, QPointF, Qt
 from PySide6.QtWidgets import QLabel, QStackedLayout, QWidget
 
 COLOR_BACKGROUND = "#ffffff"
@@ -13,7 +13,9 @@ COLOR_SPECTRUM = "#0f766e"  # teal
 COLOR_PEAK = "#dc2626"  # red
 COLOR_AXIS = "#334155"
 COLOR_PLACEHOLDER = "#64748b"
+COLOR_HOVER = "#64748b"
 GRID_ALPHA = 0.5
+_HOVER_MARGIN = 8
 
 
 def finite_float32(data: object) -> np.ndarray:
@@ -27,8 +29,21 @@ def finite_float32(data: object) -> np.ndarray:
     return arr
 
 
+def nearest_index(xs: np.ndarray, x: float) -> int:
+    """Index of the element of the ascending array ``xs`` closest to ``x``."""
+    i = int(np.searchsorted(xs, x))
+    if i > 0 and (i == xs.size or x - xs[i - 1] <= xs[i] - x):
+        i -= 1
+    return i
+
+
 class PlotWidgetBase(QWidget):
-    """A styled white ``pg.PlotWidget`` with a centered placeholder message on top."""
+    """A styled white ``pg.PlotWidget`` with a centered placeholder message on top.
+
+    Moving the mouse over the plot shows the value under the cursor in a small box
+    in the top-right corner.  Subclasses supply the text by overriding
+    :meth:`_hover_text`.
+    """
 
     def __init__(
         self,
@@ -69,6 +84,21 @@ class PlotWidgetBase(QWidget):
         layout.addWidget(self._placeholder)
         self._placeholder.raise_()
 
+        self._hover_label = QLabel(self)
+        self._hover_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self._hover_label.setStyleSheet(
+            f"background: rgba(255, 255, 255, 230); color: {COLOR_AXIS}; font-size: 11px;"
+            " border: 1px solid #cbd5e1; padding: 3px 6px;"
+        )
+        self._hover_label.hide()
+        self._hover_line = pg.InfiniteLine(
+            angle=90, movable=False, pen=pg.mkPen(COLOR_HOVER, width=1, style=Qt.PenStyle.DashLine)
+        )
+        self._hover_line.setZValue(50)
+        item.addItem(self._hover_line, ignoreBounds=True)
+        self._hover_line.hide()
+        self._plot.scene().sigMouseMoved.connect(self._on_hover_moved)
+
     @property
     def plot_widget(self) -> pg.PlotWidget:
         """The underlying ``pyqtgraph.PlotWidget``."""
@@ -87,10 +117,54 @@ class PlotWidgetBase(QWidget):
     def _hide_placeholder(self) -> None:
         self._placeholder.hide()
 
+    # --------------------------------------------------------------- hover
+    @property
+    def hover_text(self) -> str:
+        """Text of the value read-out ("" if hidden)."""
+        return self._hover_label.text() if not self._hover_label.isHidden() else ""
+
+    def _hover_text(self, x: float, y: float) -> str | None:
+        """Read-out for the view coordinates ``(x, y)``; None to show nothing."""
+        return None
+
+    def _hover_crosshair(self) -> bool:
+        """Whether a vertical line follows the cursor."""
+        return True
+
+    def _on_hover_moved(self, scene_pos: QPointF) -> None:
+        vb = self._plot.getPlotItem().vb
+        if self._placeholder.isVisible() or not vb.sceneBoundingRect().contains(scene_pos):
+            self._clear_hover()
+            return
+        point = vb.mapSceneToView(scene_pos)
+        text = self._hover_text(float(point.x()), float(point.y()))
+        if not text:
+            self._clear_hover()
+            return
+        self._hover_label.setText(text)
+        self._hover_label.adjustSize()
+        self._hover_label.move(self.width() - self._hover_label.width() - _HOVER_MARGIN, _HOVER_MARGIN)
+        self._hover_label.show()
+        self._hover_label.raise_()
+        if self._hover_crosshair():
+            self._hover_line.setPos(float(point.x()))
+            self._hover_line.show()
+        else:
+            self._hover_line.hide()
+
+    def _clear_hover(self) -> None:
+        self._hover_label.hide()
+        self._hover_line.hide()
+
+    def leaveEvent(self, event: QEvent) -> None:
+        self._clear_hover()
+        super().leaveEvent(event)
+
 
 __all__: list[str] = [
     "PlotWidgetBase",
     "finite_float32",
+    "nearest_index",
     "COLOR_WAVEFORM",
     "COLOR_SPECTRUM",
     "COLOR_PEAK",
