@@ -22,8 +22,8 @@ from PySide6.QtWidgets import (
 from app.services.recording_service import SOURCE_MICROPHONE, SOURCE_SERIAL
 from app.services.settings_service import SettingsService
 
-_SOURCES = ((SOURCE_MICROPHONE, "Microphone"), (SOURCE_SERIAL, "COM Port"))
-_BIT_DEPTHS = (("PCM_16", "16-bit PCM"), ("PCM_24", "24-bit PCM"), ("FLOAT_32", "32-bit float"))
+_SOURCES = ((SOURCE_MICROPHONE, "Микрофон"), (SOURCE_SERIAL, "COM-порт"))
+_BIT_DEPTHS = (("PCM_16", "16 бит PCM"), ("PCM_24", "24 бита PCM"), ("FLOAT_32", "32 бита float"))
 
 
 def _spin(low: int, high: int, value: int, suffix: str = "") -> QSpinBox:
@@ -40,11 +40,11 @@ class SettingsDialog(QDialog):
     def __init__(self, settings: SettingsService, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._settings = settings
-        self.setWindowTitle("Settings")
+        self.setWindowTitle("Настройки")
         self.setMinimumWidth(480)
 
         self._dir_edit = QLineEdit(str(settings.save_directory))
-        browse = QPushButton("Browse...")
+        browse = QPushButton("Обзор...")
         browse.clicked.connect(lambda _c=False: self._browse())
         dir_row = QHBoxLayout()
         dir_row.addWidget(self._dir_edit, 1)
@@ -58,17 +58,17 @@ class SettingsDialog(QDialog):
         for key, text in _BIT_DEPTHS:
             self._bit_depth.addItem(text, key)
         self._bit_depth.setCurrentIndex(max(0, self._bit_depth.findData(settings.wav_bit_depth)))
-        self._sample_rate = _spin(1000, 768_000, settings.last_sample_rate, " Hz")
-        self._baud = _spin(1, 100_000_000, settings.last_baudrate, " baud")
-        self._analysis_rate = _spin(1, 100_000_000, settings.last_serial_analysis_rate, " Hz")
+        self._sample_rate = _spin(1000, 768_000, settings.last_sample_rate, " Гц")
+        self._baud = _spin(1, 100_000_000, settings.last_baudrate, " бод")
+        self._analysis_rate = _spin(1, 100_000_000, settings.last_serial_analysis_rate, " Гц")
 
         form = QFormLayout()
-        form.addRow("Save recordings in", dir_row)
-        form.addRow("WAV bit depth", self._bit_depth)
-        form.addRow("Default source", self._source)
-        form.addRow("Microphone sample rate", self._sample_rate)
-        form.addRow("COM port baud rate", self._baud)
-        form.addRow("COM data analysis rate", self._analysis_rate)
+        form.addRow("Папка для записей", dir_row)
+        form.addRow("Разрядность WAV", self._bit_depth)
+        form.addRow("Источник по умолчанию", self._source)
+        form.addRow("Частота дискретизации микрофона", self._sample_rate)
+        form.addRow("Скорость COM-порта", self._baud)
+        form.addRow("Частота анализа данных COM-порта", self._analysis_rate)
 
         self._error = QLabel()
         self._error.setObjectName("status")
@@ -113,7 +113,7 @@ class SettingsDialog(QDialog):
         return self._analysis_rate
 
     def _browse(self) -> None:
-        chosen = QFileDialog.getExistingDirectory(self, "Choose the folder for recordings", self._dir_edit.text())
+        chosen = QFileDialog.getExistingDirectory(self, "Выберите папку для записей", self._dir_edit.text())
         if chosen:
             self._dir_edit.setText(chosen)
 
@@ -126,7 +126,7 @@ class SettingsDialog(QDialog):
         """
         text = self._dir_edit.text().strip()
         if not text:
-            raise ValueError("The save directory must not be empty.")
+            raise ValueError("Папка для записей не должна быть пустой.")
         self._settings.save_directory = Path(text)
         self._settings.wav_bit_depth = str(self._bit_depth.currentData())
         self._settings.last_source = str(self._source.currentData())

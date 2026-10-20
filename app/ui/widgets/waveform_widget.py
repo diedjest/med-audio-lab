@@ -88,7 +88,7 @@ class WaveformWidget(PlotWidgetBase):
     selection_edited = Signal(float, float)
 
     def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__("Time (s)", "Amplitude", parent)
+        super().__init__("Время (с)", "Амплитуда", parent)
         item = self._plot.getPlotItem()
         self._vb = item.vb
         self._curve = item.plot(pen=pg.mkPen(COLOR_WAVEFORM, width=1), antialias=True)
@@ -114,7 +114,7 @@ class WaveformWidget(PlotWidgetBase):
         self._selection: pg.LinearRegionItem | None = None
 
         self._vb.sigXRangeChanged.connect(self._on_x_range_changed)
-        self.clear("No data")
+        self.clear("Нет данных")
 
     # ------------------------------------------------------------- state
     @property
@@ -148,7 +148,7 @@ class WaveformWidget(PlotWidgetBase):
             raise ValueError(f"sample_rate must be positive, got {sample_rate}")
         y = finite_float32(data).copy()
         if y.size == 0:
-            self.clear("No data")
+            self.clear("Нет данных")
             return
 
         self.clear_overlay()
@@ -393,7 +393,7 @@ class WaveformWidget(PlotWidgetBase):
         self._curve.setData(self._live_x, ys, skipFiniteCheck=True)
 
     # ------------------------------------------------------------- clear
-    def clear(self, message: str = "No data") -> None:
+    def clear(self, message: str = "Нет данных") -> None:
         """Remove the waveform and show ``message`` as a placeholder."""
         self.clear_overlay()
         self.clear_regions()
@@ -412,16 +412,16 @@ class WaveformWidget(PlotWidgetBase):
             if not 0.0 <= x <= self._y.size / self._sr:
                 return None
             i = min(int(round(x * self._sr)), self._y.size - 1)
-            lines = [f"Time: {i / self._sr:.6f} s", f"Amplitude: {self._y[i]:+.5f}"]
+            lines = [f"Время: {i / self._sr:.6f} с", f"Амплитуда: {self._y[i]:+.5f}"]
             if self._ov_y is not None and i < self._ov_y.size:
-                lines.append(f"Envelope: {self._ov_y[i]:+.5f}")
+                lines.append(f"Огибающая: {self._ov_y[i]:+.5f}")
             return "\n".join(lines)
         if self._mode == "live":
             xs, ys = self._curve.getData()
             if xs is None or xs.size == 0:
                 return None
             i = nearest_index(xs, x)
-            return f"Time: {xs[i]:.4f} s\nAmplitude: {ys[i]:+.5f}"
+            return f"Время: {xs[i]:.4f} с\nАмплитуда: {ys[i]:+.5f}"
         return None
 
     # -------------------------------------------------- zoom / export / menu
@@ -449,7 +449,7 @@ class WaveformWidget(PlotWidgetBase):
         """
         if path is None:
             chosen, _ = QFileDialog.getSaveFileName(
-                self, "Export PNG", "waveform.png", "PNG image (*.png)"
+                self, "Экспорт в PNG", "waveform.png", "Изображение PNG (*.png)"
             )
             if not chosen:
                 return False
@@ -462,9 +462,9 @@ class WaveformWidget(PlotWidgetBase):
 
     def _build_context_menu(self) -> QMenu:
         menu = QMenu(self)
-        reset = menu.addAction("Reset Zoom")
+        reset = menu.addAction("Сбросить масштаб")
         reset.triggered.connect(self.reset_zoom)
-        export = menu.addAction("Export PNG")
+        export = menu.addAction("Экспорт в PNG")
         export.triggered.connect(lambda: self.export_png())
         reset.setEnabled(self.has_data)
         export.setEnabled(self.has_data)

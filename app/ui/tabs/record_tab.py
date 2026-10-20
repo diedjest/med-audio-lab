@@ -67,24 +67,24 @@ _CUSTOM_RATE_RANGE = (1000, 768000)
 _MAX_NUMERIC = 100_000_000
 _PLAYBACK_POLL_MS = 100
 _PLAY_PEAK_LIMIT = 0.95
-_AUDIO_FILE_FILTER = "Audio and data (*.wav *.txt *.csv);;WAV (*.wav);;Text / CSV (*.txt *.csv)"
+_AUDIO_FILE_FILTER = "Аудио и данные (*.wav *.txt *.csv);;WAV (*.wav);;Текст / CSV (*.txt *.csv)"
 
 _HINT_MICROPHONE = (
-    "1. Pick a microphone and a sample rate.\n"
-    "2. Choose the folder for the recordings.\n"
-    "3. Press Start.\n"
-    "4. Stop and Save writes the WAV file and adds it to the library."
+    "1. Выберите микрофон и частоту дискретизации.\n"
+    "2. Выберите папку для записей.\n"
+    "3. Нажмите «Старт».\n"
+    "4. «Стоп и сохранить» запишет WAV-файл и добавит его в библиотеку."
 )
 _HINT_SERIAL = (
-    "1. Pick the COM port and its baud rate.\n"
-    "2. Set the sample rate the data should be analysed at.\n"
-    "3. Press Start - every line must contain a number, or the stream must be\n"
-    "   16-bit ADC words.\n"
-    "4. Stop and Save writes the WAV file and adds it to the library."
+    "1. Выберите COM-порт и скорость обмена.\n"
+    "2. Задайте частоту дискретизации для анализа данных.\n"
+    "3. Нажмите «Старт». Каждая строка должна содержать число,\n"
+    "   либо поток должен состоять из 16-битных слов АЦП.\n"
+    "4. «Стоп и сохранить» запишет WAV-файл и добавит его в библиотеку."
 )
 _SOURCE_HINT = {
-    SOURCE_MICROPHONE: "Sound is recorded from the selected microphone.",
-    SOURCE_SERIAL: "Numeric samples are read from the COM port (external sensor).",
+    SOURCE_MICROPHONE: "Звук записывается с выбранного микрофона.",
+    SOURCE_SERIAL: "Числовые отсчёты читаются из COM-порта (внешний датчик).",
 }
 
 _STYLE = """
@@ -166,12 +166,12 @@ class RecordTab(QWidget):
 
         self._mic_selector = DeviceSelector(
             audio_devices or _default_audio_devices,
-            none_label="Default input device",
+            none_label="Устройство ввода по умолчанию",
             key=lambda d: d.index,
         )
         self._serial_selector = DeviceSelector(
             serial_ports or _default_serial_ports,
-            none_label="Select a COM port...",
+            none_label="Выберите COM-порт...",
             key=lambda p: p.device,
         )
 
@@ -200,10 +200,10 @@ class RecordTab(QWidget):
         layout.setSpacing(10)
 
         # --- signal source
-        self._source_group = QGroupBox("Signal source")
+        self._source_group = QGroupBox("Источник сигнала")
         box = QVBoxLayout(self._source_group)
-        self._mic_radio = QRadioButton("Microphone")
-        self._serial_radio = QRadioButton("COM Port")
+        self._mic_radio = QRadioButton("Микрофон")
+        self._serial_radio = QRadioButton("COM-порт")
         self._source_buttons = QButtonGroup(self)
         self._source_buttons.addButton(self._mic_radio, 0)
         self._source_buttons.addButton(self._serial_radio, 1)
@@ -214,7 +214,7 @@ class RecordTab(QWidget):
         layout.addWidget(self._source_group)
 
         # --- microphone
-        self._mic_group = QGroupBox("Microphone")
+        self._mic_group = QGroupBox("Микрофон")
         box = QVBoxLayout(self._mic_group)
         box.addWidget(self._mic_selector)
         rate_form = QFormLayout()
@@ -222,8 +222,8 @@ class RecordTab(QWidget):
         rate_row = QHBoxLayout()
         self._rate_combo = QComboBox()
         for rate in SAMPLE_RATE_PRESETS:
-            self._rate_combo.addItem(f"{rate} Hz", rate)
-        self._rate_combo.addItem("Custom...", None)
+            self._rate_combo.addItem(f"{rate} Гц", rate)
+        self._rate_combo.addItem("Другая...", None)
         self._rate_spin = QSpinBox()
         self._rate_spin.setRange(*_CUSTOM_RATE_RANGE)
         self._rate_spin.setValue(88200)
@@ -231,14 +231,14 @@ class RecordTab(QWidget):
         self._rate_spin.hide()
         rate_row.addWidget(self._rate_combo, 1)
         rate_row.addWidget(self._rate_spin, 1)
-        rate_form.addRow("Sample rate", rate_row)
+        rate_form.addRow("Частота дискретизации", rate_row)
         box.addLayout(rate_form)
         self._mic_info = _muted()
         box.addWidget(self._mic_info)
         layout.addWidget(self._mic_group)
 
         # --- COM port
-        self._serial_group = QGroupBox("COM port")
+        self._serial_group = QGroupBox("COM-порт")
         box = QVBoxLayout(self._serial_group)
         box.addWidget(self._serial_selector)
         form = QFormLayout()
@@ -249,21 +249,21 @@ class RecordTab(QWidget):
         self._baud_combo.lineEdit().setValidator(QIntValidator(1, _MAX_NUMERIC, self))
         self._analysis_rate_edit = QLineEdit()
         self._analysis_rate_edit.setValidator(QIntValidator(1, _MAX_NUMERIC, self))
-        self._analysis_rate_edit.setToolTip("Sample rate in Hz assumed for analysis of the COM data")
-        form.addRow("Baud rate", self._baud_combo)
-        form.addRow("Analysis rate (Hz)", self._analysis_rate_edit)
+        self._analysis_rate_edit.setToolTip("Частота дискретизации (Гц), с которой анализируются данные COM-порта")
+        form.addRow("Скорость (бод)", self._baud_combo)
+        form.addRow("Частота анализа (Гц)", self._analysis_rate_edit)
         box.addLayout(form)
         self._serial_info = _muted()
         box.addWidget(self._serial_info)
         layout.addWidget(self._serial_group)
 
         # --- save directory
-        self._save_group = QGroupBox("Save directory")
+        self._save_group = QGroupBox("Папка сохранения")
         box = QVBoxLayout(self._save_group)
         self._dir_edit = QLineEdit(str(self._settings.save_directory))
         row = QHBoxLayout()
-        self._browse_button = QPushButton("Browse...")
-        self._open_dir_button = QPushButton("Open")
+        self._browse_button = QPushButton("Обзор...")
+        self._open_dir_button = QPushButton("Открыть")
         row.addWidget(self._browse_button, 1)
         row.addWidget(self._open_dir_button, 1)
         box.addWidget(self._dir_edit)
@@ -271,21 +271,21 @@ class RecordTab(QWidget):
         layout.addWidget(self._save_group)
 
         # --- recording details (stay editable while recording)
-        self._meta_group = QGroupBox("Recording details")
+        self._meta_group = QGroupBox("Сведения о записи")
         form = QFormLayout(self._meta_group)
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
         self._title_edit = QLineEdit()
-        self._title_edit.setPlaceholderText("Recording")
+        self._title_edit.setPlaceholderText("Запись")
         self._patient_edit = QLineEdit()
         self._notes_edit = QPlainTextEdit()
         self._notes_edit.setFixedHeight(84)
-        form.addRow("Title", self._title_edit)
-        form.addRow("Patient / sample", self._patient_edit)
-        form.addRow("Notes", self._notes_edit)
+        form.addRow("Название", self._title_edit)
+        form.addRow("Пациент / образец", self._patient_edit)
+        form.addRow("Заметки", self._notes_edit)
         layout.addWidget(self._meta_group)
 
         # --- hints
-        self._hints_group = QGroupBox("Hints")
+        self._hints_group = QGroupBox("Подсказки")
         box = QVBoxLayout(self._hints_group)
         self._hints_label = _muted(_HINT_MICROPHONE)
         box.addWidget(self._hints_label)
@@ -306,19 +306,19 @@ class RecordTab(QWidget):
         main.setSpacing(8)
 
         top = QHBoxLayout()
-        actions = QGroupBox("Main actions")
+        actions = QGroupBox("Основные действия")
         bar = QHBoxLayout(actions)
-        self._start_button = QPushButton("Start")
+        self._start_button = QPushButton("Старт")
         self._start_button.setObjectName("primary")
-        self._pause_button = QPushButton("Pause")
-        self._stop_button = QPushButton("Stop and Save")
+        self._pause_button = QPushButton("Пауза")
+        self._stop_button = QPushButton("Стоп и сохранить")
         self._stop_button.setObjectName("danger")
-        self._discard_button = QPushButton("Discard")
-        self._discard_button.setToolTip("Throw away the capture that could not be saved")
+        self._discard_button = QPushButton("Отбросить")
+        self._discard_button.setToolTip("Удалить запись, которую не удалось сохранить")
         self._discard_button.hide()
-        self._play_button = QPushButton("Play")
-        self._stop_playback_button = QPushButton("Stop Playback")
-        self._load_button = QPushButton("Load File")
+        self._play_button = QPushButton("Воспроизвести")
+        self._stop_playback_button = QPushButton("Остановить воспроизведение")
+        self._load_button = QPushButton("Загрузить файл")
         self._load_button.setObjectName("primary")
         for button in (
             self._start_button,
@@ -337,7 +337,7 @@ class RecordTab(QWidget):
         self._status_label.setObjectName("status")
         self._status_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self._level_meter = LevelMeter()
-        self._freq_label = ElidedLabel("Peak frequency: -")
+        self._freq_label = ElidedLabel("Частота пика: -")
         self._freq_label.setObjectName("muted")
         self._freq_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         level_box.addWidget(self._status_label)
@@ -361,8 +361,8 @@ class RecordTab(QWidget):
 
         self._mic_selector.device_selected.connect(self._on_device_chosen)
         self._serial_selector.device_selected.connect(self._on_device_chosen)
-        self._mic_selector.load_failed.connect(lambda m: self._report(f"Cannot list audio devices: {m}"))
-        self._serial_selector.load_failed.connect(lambda m: self._report(f"Cannot list COM ports: {m}"))
+        self._mic_selector.load_failed.connect(lambda m: self._report(f"Не удалось получить список аудиоустройств: {m}"))
+        self._serial_selector.load_failed.connect(lambda m: self._report(f"Не удалось получить список COM-портов: {m}"))
 
         self._rate_combo.activated.connect(self._on_rate_activated)
         self._rate_spin.valueChanged.connect(self._on_custom_rate_changed)
@@ -446,20 +446,20 @@ class RecordTab(QWidget):
 
     def _show_status(self, text: str, *, error: bool | None = None) -> None:
         self._status_label.setText(text)
-        is_error = text.startswith("Error") if error is None else error
+        is_error = text.startswith("Ошибка") if error is None else error
         self._status_label.setProperty("error", is_error)
         self._status_label.style().unpolish(self._status_label)
         self._status_label.style().polish(self._status_label)
 
     def _report(self, message: str) -> None:
         """Show a tab-level error and tell the owner."""
-        self._show_status(f"Error: {message}", error=True)
+        self._show_status(f"Ошибка: {message}", error=True)
         self.error_occurred.emit(message)
 
     def _reset_plots(self) -> None:
-        self._waveform.clear("Press Start to begin recording")
-        self._spectrum.clear("Waiting for signal")
-        self._freq_label.setText("Peak frequency: -")
+        self._waveform.clear("Нажмите «Старт», чтобы начать запись")
+        self._spectrum.clear("Ожидание сигнала")
+        self._freq_label.setText("Частота пика: -")
 
     # ================================================ source / device / rates
     @Slot(int)
@@ -485,14 +485,14 @@ class RecordTab(QWidget):
     def _update_device_info(self, device: Any) -> None:
         if isinstance(device, AudioDeviceInfo):
             self._mic_info.setText(
-                f"{device.input_channels} input channel(s), default {device.default_sample_rate} Hz, "
-                f"{device.hostapi or 'unknown API'}"
+                f"входных каналов: {device.input_channels}, по умолчанию {device.default_sample_rate} Гц, "
+                f"{device.hostapi or 'неизвестный API'}"
             )
         elif isinstance(device, SerialPortInfo):
             self._serial_info.setText(device.description or device.device)
         else:
-            self._mic_info.setText("The system default input device is used.")
-            self._serial_info.setText("Choose the port the sensor is connected to.")
+            self._mic_info.setText("Используется устройство ввода по умолчанию.")
+            self._serial_info.setText("Выберите порт, к которому подключён датчик.")
 
     @Slot(int)
     def _on_rate_activated(self, index: int) -> None:
@@ -575,7 +575,7 @@ class RecordTab(QWidget):
 
     def _browse_save_directory(self) -> None:
         chosen = QFileDialog.getExistingDirectory(
-            self, "Choose the folder for recordings", str(self._settings.save_directory)
+            self, "Выберите папку для записей", str(self._settings.save_directory)
         )
         if chosen:
             self._apply_save_directory(chosen)
@@ -585,7 +585,7 @@ class RecordTab(QWidget):
         try:
             directory.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
-            self._report(f"Cannot create {directory}: {exc}")
+            self._report(f"Не удалось создать {directory}: {exc}")
             return
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(directory)))
 
@@ -610,9 +610,9 @@ class RecordTab(QWidget):
 
         self._start_button.setEnabled(not recording and not unsaved and not busy)
         self._pause_button.setEnabled(recording)
-        self._pause_button.setText("Resume" if paused else "Pause")
+        self._pause_button.setText("Продолжить" if paused else "Пауза")
         self._stop_button.setEnabled(recording or unsaved)
-        self._stop_button.setText("Save" if unsaved and not recording else "Stop and Save")
+        self._stop_button.setText("Сохранить" if unsaved and not recording else "Стоп и сохранить")
         self._discard_button.setVisible(unsaved and not recording)
         self._play_button.setEnabled(can_play and not recording and not self._is_playing and not busy)
         self._stop_playback_button.setEnabled(self._is_playing)
@@ -637,7 +637,7 @@ class RecordTab(QWidget):
     def _on_live_spectrum(self, freqs: object, magnitudes: object, peak_hz: object) -> None:
         peak = None if peak_hz is None else float(peak_hz)  # type: ignore[arg-type]
         self._spectrum.update_spectrum(freqs, magnitudes, peak)  # type: ignore[arg-type]
-        self._freq_label.setText("Peak frequency: -" if peak is None else f"Peak frequency: {peak / 1000.0:.2f} kHz")
+        self._freq_label.setText("Частота пика: -" if peak is None else f"Частота пика: {peak / 1000.0:.2f} кГц")
 
     def _update_meter(self) -> None:
         self._level_meter.set_levels(self._vm.peak_dbfs, self._vm.rms_dbfs)
@@ -647,8 +647,8 @@ class RecordTab(QWidget):
 
     # =============================================== saved recordings & files
     def _on_recording_stopped(self, session: RecordingSession) -> None:
-        self._spectrum.clear("Recording stopped")
-        self._freq_label.setText("Peak frequency: -")
+        self._spectrum.clear("Запись остановлена")
+        self._freq_label.setText("Частота пика: -")
         if session.id is not None:
             self._start_loader(self._pm.load_recording, (session.id,), "load_saved_recording")
 
@@ -662,7 +662,7 @@ class RecordTab(QWidget):
             return
         if path is None:
             chosen, _ = QFileDialog.getOpenFileName(
-                self, "Load audio or data file", str(self._settings.save_directory), _AUDIO_FILE_FILTER
+                self, "Загрузить аудио или файл данных", str(self._settings.save_directory), _AUDIO_FILE_FILTER
             )
             if not chosen:
                 return
@@ -736,7 +736,7 @@ class RecordTab(QWidget):
         try:
             self._playback.play(samples, rate)
         except Exception as exc:
-            self._report(f"Cannot play audio: {exc}")
+            self._report(f"Не удалось воспроизвести звук: {exc}")
             return
         self._is_playing = True
         self._playback_timer.start()
@@ -748,7 +748,7 @@ class RecordTab(QWidget):
             try:
                 self._playback.stop()
             except Exception as exc:
-                self._report(f"Cannot stop playback: {exc}")
+                self._report(f"Не удалось остановить воспроизведение: {exc}")
         self._finish_playback()
 
     def _finish_playback(self) -> None:

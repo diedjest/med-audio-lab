@@ -30,7 +30,7 @@ from app.ui.widgets.elided_label import ElidedLabel
 #: What the user chose in the delete confirmation: keep the file, delete it too, or cancel.
 DeleteChoice = Literal["library", "file"] | None
 
-COLUMNS: tuple[str, ...] = ("ID", "Date", "Title", "Patient", "Duration", "Sample Rate", "File Path")
+COLUMNS: tuple[str, ...] = ("ID", "Дата", "Название", "Пациент", "Длительность", "Частота дискретизации", "Путь к файлу")
 _COLUMN_WIDTHS = (50, 140, 190, 150, 90, 100)
 _NUMERIC_COLUMNS = (0, 4, 5)
 _COLOR_MISSING = QBrush(QColor("#b91c1c"))
@@ -48,9 +48,9 @@ QLabel#status[error="true"] { color: #b91c1c; }
 
 
 def format_duration(seconds: float) -> str:
-    """``12.5 -> "12.50 s"``, ``75.5 -> "1:15.50"``."""
+    """``12.5 -> "12.50 с"``, ``75.5 -> "1:15.50"``."""
     if seconds < 60.0:
-        return f"{seconds:.2f} s"
+        return f"{seconds:.2f} с"
     minutes, rest = divmod(seconds, 60.0)
     return f"{int(minutes)}:{rest:05.2f}"
 
@@ -66,7 +66,7 @@ class _RecordingItem(QTreeWidgetItem):
                 session.title,
                 session.patient,
                 format_duration(session.duration_s),
-                f"{session.sample_rate} Hz",
+                f"{session.sample_rate} Гц",
                 session.file_path,
             ]
         )
@@ -84,7 +84,7 @@ class _RecordingItem(QTreeWidgetItem):
             self.setTextAlignment(column, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         if not file_exists:
             self.setForeground(6, _COLOR_MISSING)
-            self.setToolTip(6, "The audio file no longer exists")
+            self.setToolTip(6, "Аудиофайл больше не существует")
 
     def __lt__(self, other: QTreeWidgetItem) -> bool:
         tree = self.treeWidget()
@@ -116,15 +116,15 @@ def _ask_delete_choice(parent: QWidget, session: RecordingSession) -> DeleteChoi
     """Default confirmation: three explicit choices, Cancel is the default."""
     box = QMessageBox(parent)
     box.setIcon(QMessageBox.Icon.Warning)
-    box.setWindowTitle("Delete recording")
-    box.setText(f"Remove '{session.title or 'Untitled'}' from the library?")
+    box.setWindowTitle("Удаление записи")
+    box.setText(f"Удалить «{session.title or 'Без названия'}» из библиотеки?")
     box.setInformativeText(
-        f"File: {session.file_path}\n\n"
-        "'Remove from library' keeps the audio file on disk.\n"
-        "'Remove and delete file' also deletes the file permanently."
+        f"Файл: {session.file_path}\n\n"
+        "«Удалить из библиотеки» оставляет аудиофайл на диске.\n"
+        "«Удалить вместе с файлом» также безвозвратно удаляет файл."
     )
-    keep = box.addButton("Remove from library", QMessageBox.ButtonRole.AcceptRole)
-    wipe = box.addButton("Remove and delete file", QMessageBox.ButtonRole.DestructiveRole)
+    keep = box.addButton("Удалить из библиотеки", QMessageBox.ButtonRole.AcceptRole)
+    wipe = box.addButton("Удалить вместе с файлом", QMessageBox.ButtonRole.DestructiveRole)
     cancel = box.addButton(QMessageBox.StandardButton.Cancel)
     box.setDefaultButton(cancel)
     box.setEscapeButton(cancel)
@@ -153,7 +153,7 @@ class LibraryTab(QWidget):
 
     Signals:
         ``recording_loaded(session, samples)`` - a recording was opened (double-click
-        or "Load Selected"); the owner passes it on to the Analysis tab.
+        or "Загрузить выбранную"); the owner passes it on to the Analysis tab.
         ``error_occurred(message)`` - anything that went wrong, also shown in the tab.
     """
 
@@ -183,22 +183,22 @@ class LibraryTab(QWidget):
 
         search_row = QHBoxLayout()
         self._search = QLineEdit()
-        self._search.setPlaceholderText("Search title, patient, date, notes, file...")
+        self._search.setPlaceholderText("Поиск по названию, пациенту, дате, заметкам, файлу...")
         self._search.setClearButtonEnabled(True)
         self._count_label = QLabel()
         self._count_label.setObjectName("muted")
-        self._refresh_button = QPushButton("Refresh")
+        self._refresh_button = QPushButton("Обновить")
         search_row.addWidget(self._search, 1)
         search_row.addWidget(self._count_label)
         search_row.addWidget(self._refresh_button)
         root.addLayout(search_row)
 
         buttons = QHBoxLayout()
-        self._load_button = QPushButton("Load Selected")
+        self._load_button = QPushButton("Загрузить выбранную")
         self._load_button.setObjectName("primary")
-        self._report_button = QPushButton("Export Report CSV")
-        self._folder_button = QPushButton("Open Folder")
-        self._delete_button = QPushButton("Delete")
+        self._report_button = QPushButton("Экспорт отчёта в CSV")
+        self._folder_button = QPushButton("Открыть папку")
+        self._delete_button = QPushButton("Удалить")
         self._delete_button.setObjectName("danger")
         for button in (self._load_button, self._report_button, self._folder_button, self._delete_button):
             buttons.addWidget(button)
@@ -243,8 +243,8 @@ class LibraryTab(QWidget):
         vm.recordings_changed.connect(self._populate)
         vm.is_loading_changed.connect(self._on_loading_changed)
         vm.recording_loaded.connect(self._on_recording_loaded)
-        vm.recording_deleted.connect(lambda rid: self._show_status(f"Deleted recording {rid}."))
-        vm.report_exported.connect(lambda path: self._show_status(f"Report saved: {path}"))
+        vm.recording_deleted.connect(lambda rid: self._show_status(f"Запись {rid} удалена."))
+        vm.report_exported.connect(lambda path: self._show_status(f"Отчёт сохранён: {path}"))
         vm.error_occurred.connect(self._report)
 
     # ================================================================== helpers
@@ -316,7 +316,7 @@ class LibraryTab(QWidget):
             item.setHidden(hidden)
             shown += 0 if hidden else 1
         total = self._tree.topLevelItemCount()
-        self._count_label.setText(f"{shown} of {total}" if tokens else f"{total} recordings")
+        self._count_label.setText(f"{shown} из {total}" if tokens else f"Записей: {total}")
         selected = self._tree.selectedItems()
         if selected and selected[0].isHidden():
             self._tree.clearSelection()
@@ -336,14 +336,14 @@ class LibraryTab(QWidget):
         session = self.selected_session()
         if session is None or session.id is None:
             return
-        self._show_status(f"Loading '{session.title}'...")
+        self._show_status(f"Загрузка «{session.title}»...")
         self._vm.load_recording(session.id)
 
     def _on_loading_changed(self, loading: bool) -> None:
         self._update_controls()
 
     def _on_recording_loaded(self, session: RecordingSession, samples: object) -> None:
-        self._show_status(f"Loaded '{session.title}' ({session.duration_s:.2f} s).")
+        self._show_status(f"Загружено: «{session.title}» ({session.duration_s:.2f} с).")
         self.recording_loaded.emit(session, samples)
 
     def export_report(self, path: str | Path | None = None) -> None:
@@ -354,12 +354,12 @@ class LibraryTab(QWidget):
         if path is None:
             default = self._settings.app_data_dir / "exports" / f"{slugify(session.title)}_report.csv"
             chosen, _ = QFileDialog.getSaveFileName(
-                self, "Save report", str(default), "CSV (*.csv);;All files (*)"
+                self, "Сохранить отчёт", str(default), "CSV (*.csv);;Все файлы (*)"
             )
             if not chosen:
                 return
             path = chosen
-        self._show_status(f"Writing the report for '{session.title}'...")
+        self._show_status(f"Формирование отчёта для «{session.title}»...")
         self._vm.export_report(session.id, str(path))
 
     def open_folder(self) -> None:
@@ -371,13 +371,13 @@ class LibraryTab(QWidget):
                 try:
                     folder.mkdir(parents=True, exist_ok=True)
                 except OSError as exc:
-                    self._report(f"Cannot create {folder}: {exc}")
+                    self._report(f"Не удалось создать {folder}: {exc}")
                     return
             else:
-                self._report(f"The folder {folder} no longer exists.")
+                self._report(f"Папка {folder} больше не существует.")
                 return
         if not self._open_folder_fn(folder):
-            self._report(f"Cannot open {folder}")
+            self._report(f"Не удалось открыть {folder}")
 
     def delete_selected(self) -> None:
         """Delete the selected recording after asking what to do with its file."""

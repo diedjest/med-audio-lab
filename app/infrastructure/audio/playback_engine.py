@@ -78,7 +78,7 @@ class PlaybackEngine(IAudioPlaybackEngine):
         if samples.ndim not in (1, 2):
             raise ValueError(f"data must be 1D or 2D, got shape {samples.shape}")
         if samples.shape[0] == 0:
-            raise ValueError("No audio data to play.")
+            raise ValueError("Нет аудиоданных для воспроизведения.")
 
         with self._lock:
             self._playing = False

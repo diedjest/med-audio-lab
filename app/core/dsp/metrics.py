@@ -103,19 +103,19 @@ def format_metrics(metrics: SignalMetrics) -> dict[str, str]:
     Used by the analysis view and stored with recordings, so reports show the same text.
     """
     return {
-        "Duration": f"{metrics.duration_s:.3f} s",
-        "Sample rate": f"{metrics.sample_rate} Hz",
-        "Samples": f"{metrics.n_samples}",
-        "RMS": f"{metrics.rms:.5f}",
-        "Peak": f"{metrics.peak:.5f}",
-        "RMS level": f"{metrics.rms_dbfs:.1f} dBFS",
-        "Peak level": f"{metrics.peak_dbfs:.1f} dBFS",
-        "Zero crossing rate": f"{metrics.zero_crossing_rate:.4f}",
-        "Dominant frequency": f"{metrics.dominant_freq_hz:.1f} Hz",
-        "Spectral centroid": f"{metrics.spectral_centroid_hz:.1f} Hz",
-        "Spectral bandwidth": f"{metrics.spectral_bandwidth_hz:.1f} Hz",
-        "Roll-off 85%": f"{metrics.spectral_rolloff_hz:.1f} Hz",
-        "THD": f"{metrics.thd * 100.0:.2f} %",
+        "Длительность": f"{metrics.duration_s:.3f} с",
+        "Частота дискретизации": f"{metrics.sample_rate} Гц",
+        "Отсчётов": f"{metrics.n_samples}",
+        "СКЗ (RMS)": f"{metrics.rms:.5f}",
+        "Пик": f"{metrics.peak:.5f}",
+        "Уровень СКЗ": f"{metrics.rms_dbfs:.1f} дБFS",
+        "Уровень пика": f"{metrics.peak_dbfs:.1f} дБFS",
+        "Частота пересечений нуля": f"{metrics.zero_crossing_rate:.4f}",
+        "Доминирующая частота": f"{metrics.dominant_freq_hz:.1f} Гц",
+        "Спектральный центроид": f"{metrics.spectral_centroid_hz:.1f} Гц",
+        "Ширина полосы": f"{metrics.spectral_bandwidth_hz:.1f} Гц",
+        "Срез спектра 85%": f"{metrics.spectral_rolloff_hz:.1f} Гц",
+        "КНИ (THD)": f"{metrics.thd * 100.0:.2f} %",
     }
 
 

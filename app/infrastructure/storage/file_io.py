@@ -77,9 +77,9 @@ def read_wav(
     """
     p = Path(path)
     if not p.is_file():
-        raise FileNotFoundError(f"File not found: {path}")
+        raise FileNotFoundError(f"Файл не найден: {path}")
     if p.stat().st_size == 0:
-        raise ValueError(f"WAV file is empty: {path}")
+        raise ValueError(f"WAV-файл пуст: {path}")
 
     result: tuple[int, np.ndarray, bool] | None = None
     failure: Exception | None = None
@@ -95,8 +95,8 @@ def read_wav(
             failure = exc
     if result is None:
         if failure is not None:
-            raise ValueError(f"Cannot decode WAV file {path}: {failure}") from failure
-        raise ImportError("soundfile or scipy is required to read WAV files.")
+            raise ValueError(f"Не удалось прочитать WAV-файл {path}: {failure}") from failure
+        raise ImportError("Для чтения WAV-файлов нужен soundfile или scipy.")
 
     fs, x, pcm_scaled = result
     if mono and x.ndim > 1:
@@ -172,7 +172,7 @@ def _load_numeric_table(path: str | Path) -> np.ndarray:
             if values:
                 rows.append(values)
     if not rows:
-        raise ValueError(f"No numeric data found in: {path}")
+        raise ValueError(f"В файле нет числовых данных: {path}")
 
     table = np.full((len(rows), max(len(r) for r in rows)), np.nan, dtype=np.float64)
     for i, row in enumerate(rows):
@@ -247,17 +247,17 @@ def txt_to_wav(
 
     if n_cols == 1:
         if sample_rate is None:
-            raise ValueError("A sample rate is required for single-column files.")
+            raise ValueError("Для файлов с одним столбцом нужно указать частоту дискретизации.")
         fs = int(sample_rate)
     elif sample_rate is not None:
         fs = int(sample_rate)
     else:
         estimated = _estimate_sample_rate(table[:, 0])
         if estimated is None:
-            raise ValueError("Cannot estimate the sample rate from the time column.")
+            raise ValueError("Не удалось оценить частоту дискретизации по столбцу времени.")
         fs = estimated
     if fs <= 0:
-        raise ValueError(f"Invalid sample rate: {fs}")
+        raise ValueError(f"Некорректная частота дискретизации: {fs}")
 
     try:
         y = table[:, amplitude_col].astype(np.float64)

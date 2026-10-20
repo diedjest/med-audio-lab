@@ -112,7 +112,7 @@ class AnalysisWorker(QThread):
             if self._cancel_event.is_set():
                 raise TaskCancelled()
         except TaskCancelled:
-            self.error.emit(name, "Cancelled.")
+            self.error.emit(name, "Отменено.")
         except BaseException as exc:  # nothing may escape the thread
             self._last_traceback = traceback.format_exc()
             self.error.emit(name, str(exc) or type(exc).__name__)

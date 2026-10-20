@@ -223,3 +223,5 @@ __marimo__/
 *.zip
 # Internal architecture notes
 project_architecture.md
+
+tests/data/records

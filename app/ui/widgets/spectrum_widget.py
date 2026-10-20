@@ -19,7 +19,7 @@ class SpectrumWidget(PlotWidgetBase):
     """pyqtgraph spectrum plot: frequency in kHz, teal line, dashed red peak marker."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__("Frequency (kHz)", "Magnitude", parent)
+        super().__init__("Частота (кГц)", "Магнитуда", parent)
         item = self._plot.getPlotItem()
         self._vb = item.vb
         self._curve = item.plot(pen=pg.mkPen(COLOR_SPECTRUM, width=1.5), antialias=True)
@@ -38,7 +38,7 @@ class SpectrumWidget(PlotWidgetBase):
         self._x_span: tuple[float, float, int] | None = None
         self._khz: np.ndarray | None = None
         self._mags: np.ndarray | None = None
-        self.clear("No signal")
+        self.clear("Нет сигнала")
 
     # ------------------------------------------------------------- state
     @property
@@ -80,7 +80,7 @@ class SpectrumWidget(PlotWidgetBase):
                 f"freqs_hz ({freqs.size}) and magnitudes ({mags.size}) must have the same length"
             )
         if freqs.size == 0:
-            self.clear("No signal")
+            self.clear("Нет сигнала")
             return
 
         self._hide_placeholder()
@@ -102,7 +102,7 @@ class SpectrumWidget(PlotWidgetBase):
             peak_khz = float(peak_hz) / 1000.0
             self._peak_line.setValue(peak_khz)
             self._peak_line.show()
-            self._peak_label.setText(f"peak: {peak_khz:.2f} kHz")
+            self._peak_label.setText(f"пик: {peak_khz:.2f} кГц")
             # keep the label inside the plot: flip to the left of the line near the right edge
             on_right_half = peak_khz > 0.5 * (span[0] + span[1])
             self._peak_label.setAnchor((1.0, 0.0) if on_right_half else (0.0, 0.0))
@@ -112,7 +112,7 @@ class SpectrumWidget(PlotWidgetBase):
             self._peak_line.hide()
             self._peak_label.hide()
 
-    def clear(self, message: str = "No signal") -> None:
+    def clear(self, message: str = "Нет сигнала") -> None:
         """Remove the spectrum and show ``message`` as a placeholder."""
         self._curve.setData([], [])
         self._peak_line.hide()
@@ -128,7 +128,7 @@ class SpectrumWidget(PlotWidgetBase):
         if self._khz is None or self._mags is None:
             return None
         i = nearest_index(self._khz, x)
-        return f"Frequency: {self._khz[i]:.3f} kHz\nMagnitude: {self._mags[i]:.4g}"
+        return f"Частота: {self._khz[i]:.3f} кГц\nМагнитуда: {self._mags[i]:.4g}"
 
 
 __all__: list[str] = ["SpectrumWidget"]

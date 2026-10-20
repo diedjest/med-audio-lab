@@ -46,8 +46,8 @@ class DeviceSelector(QWidget):
         self._combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._refresh_button = QToolButton(self)
         self._refresh_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_BrowserReload))
-        self._refresh_button.setAccessibleName("Refresh devices")
-        self._refresh_button.setToolTip("Rescan the available devices")
+        self._refresh_button.setAccessibleName("Обновить список устройств")
+        self._refresh_button.setToolTip("Повторно найти доступные устройства")
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)

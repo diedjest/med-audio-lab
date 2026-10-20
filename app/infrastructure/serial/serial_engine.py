@@ -195,7 +195,7 @@ class SerialCaptureEngine(ISerialEngine):
 
         with self._state_lock:
             if self._recording:
-                raise SerialCaptureError("Serial capture is already running.")
+                raise SerialCaptureError("Приём из COM-порта уже идёт.")
 
             with self._lock:
                 self._chunks = []
@@ -226,7 +226,7 @@ class SerialCaptureEngine(ISerialEngine):
                         ser.close()
                     except OSError:
                         pass
-                error = SerialCaptureError(f"Cannot open serial port {port!r}: {exc}")
+                error = SerialCaptureError(f"Не удалось открыть COM-порт {port!r}: {exc}")
                 self._emit_error(error)
                 raise error from exc
 
@@ -275,7 +275,7 @@ class SerialCaptureEngine(ISerialEngine):
                 try:
                     ser.close()
                 except OSError as exc:
-                    self._emit_error(SerialCaptureError(f"Error closing port: {exc}"))
+                    self._emit_error(SerialCaptureError(f"Ошибка закрытия порта: {exc}"))
 
             self._recording = False
             self._paused = False

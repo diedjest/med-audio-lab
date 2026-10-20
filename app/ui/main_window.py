@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Callable, Literal, Sequence
 
 import numpy as np
-from PySide6.QtCore import QByteArray, QTimer, Qt
+from PySide6.QtCore import QByteArray, QLibraryInfo, QTimer, QTranslator, Qt
 from PySide6.QtGui import QAction, QCloseEvent, QGuiApplication, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -64,7 +64,7 @@ from app.ui.viewmodels.recording_vm import RecordingViewModel
 from app.ui.workers.analysis_worker import AnalysisWorker
 from app.ui.workers.export_worker import ExportWorker
 
-WINDOW_TITLE = "MedAudioLab — Ultrasound Signal Analysis Workstation"
+WINDOW_TITLE = "MedAudioLab — рабочее место анализа ультразвуковых сигналов"
 ORGANIZATION_NAME = "MedAudioLab"
 DEFAULT_SIZE = (1400, 900)
 MINIMUM_SIZE = (1100, 700)
@@ -77,7 +77,7 @@ _ERROR_MESSAGE_MS = 10_000
 _INFO_MESSAGE_MS = 6_000
 _SIGINT_POLL_MS = 250
 _WORKER_WAIT_MS = 5_000
-_FALLBACK_TITLE = "Edited signal"
+_FALLBACK_TITLE = "Обработанный сигнал"
 
 #: What the user picked when closing during a recording / with an unsaved capture.
 CloseChoice = Literal["save", "discard"] | None
@@ -172,17 +172,17 @@ def _ask_close_choice(parent: QWidget, kind: str) -> CloseChoice:
     """Default close confirmation: ``kind`` is ``"recording"`` or ``"unsaved"``."""
     box = QMessageBox(parent)
     box.setIcon(QMessageBox.Icon.Warning)
-    box.setWindowTitle("Quit MedAudioLab")
+    box.setWindowTitle("Выход из MedAudioLab")
     save = discard = None
     if kind == "recording":
-        box.setText("A recording is in progress.")
-        box.setInformativeText("Save it before quitting, or discard the audio captured so far?")
-        save = box.addButton("Stop and save", QMessageBox.ButtonRole.AcceptRole)
+        box.setText("Идёт запись.")
+        box.setInformativeText("Сохранить запись перед выходом или отбросить уже записанный звук?")
+        save = box.addButton("Остановить и сохранить", QMessageBox.ButtonRole.AcceptRole)
     else:
-        box.setText("The last recording could not be saved and is still in memory.")
-        box.setInformativeText("Try to save it again, or discard it and quit?")
-        save = box.addButton("Try saving again", QMessageBox.ButtonRole.AcceptRole)
-    discard = box.addButton("Discard and quit", QMessageBox.ButtonRole.DestructiveRole)
+        box.setText("Последнюю запись не удалось сохранить, она остаётся в памяти.")
+        box.setInformativeText("Повторить сохранение или отбросить запись и выйти?")
+        save = box.addButton("Сохранить ещё раз", QMessageBox.ButtonRole.AcceptRole)
+    discard = box.addButton("Отбросить и выйти", QMessageBox.ButtonRole.DestructiveRole)
     cancel = box.addButton(QMessageBox.StandardButton.Cancel)
     box.setDefaultButton(save)
     box.setEscapeButton(cancel)
@@ -235,7 +235,7 @@ class MainWindow(QMainWindow):
         self._restore_geometry()
         self._ctx.library_vm.refresh()  # the Library tab is hidden at startup; load it now
         self._refresh_state()
-        self.statusBar().showMessage("Ready", _INFO_MESSAGE_MS)
+        self.statusBar().showMessage("Готово", _INFO_MESSAGE_MS)
 
     # ============================================================== accessors
     @property
@@ -278,9 +278,9 @@ class MainWindow(QMainWindow):
         self._library_tab = LibraryTab(ctx.library_vm, ctx.settings)
 
         self._tabs = QTabWidget()
-        self._tabs.addTab(self._record_tab, "Record")
-        self._tabs.addTab(self._analysis_tab, "Analysis")
-        self._tabs.addTab(self._library_tab, "Library")
+        self._tabs.addTab(self._record_tab, "Запись")
+        self._tabs.addTab(self._analysis_tab, "Анализ")
+        self._tabs.addTab(self._library_tab, "Библиотека")
         self.setCentralWidget(self._tabs)
 
     def _action(self, menu: QMenu, text: str, slot: Callable[[], Any], shortcut: str | QKeySequence.StandardKey | None = None) -> QAction:
@@ -294,36 +294,36 @@ class MainWindow(QMainWindow):
     def _build_menus(self) -> None:
         bar = self.menuBar()
 
-        file_menu = bar.addMenu("&File")
-        self._open_action = self._action(file_menu, "&Open...", self.open_file, QKeySequence.StandardKey.Open)
+        file_menu = bar.addMenu("&Файл")
+        self._open_action = self._action(file_menu, "&Открыть...", self.open_file, QKeySequence.StandardKey.Open)
         self._save_action = self._action(
-            file_menu, "&Save as new recording...", self.save_current_signal, QKeySequence.StandardKey.Save
+            file_menu, "&Сохранить как новую запись...", self.save_current_signal, QKeySequence.StandardKey.Save
         )
-        export_menu = file_menu.addMenu("&Export")
-        self._export_png_action = self._action(export_menu, "Current plot as &PNG...", self.export_plot_png)
-        self._export_wav_action = self._action(export_menu, "Signal as &WAV...", self.export_signal_wav)
-        self._export_csv_action = self._action(export_menu, "Signal as &CSV...", self.export_signal_csv)
+        export_menu = file_menu.addMenu("&Экспорт")
+        self._export_png_action = self._action(export_menu, "Текущий график как &PNG...", self.export_plot_png)
+        self._export_wav_action = self._action(export_menu, "Сигнал как &WAV...", self.export_signal_wav)
+        self._export_csv_action = self._action(export_menu, "Сигнал как &CSV...", self.export_signal_csv)
         self._export_segment_action = self._action(
-            export_menu, "Selected &segment as WAV...", self.export_segment_wav
+            export_menu, "Выделенный &фрагмент как WAV...", self.export_segment_wav
         )
         self._export_impulses_action = self._action(
-            export_menu, "Detected &impulses as CSV...", self.export_impulses_csv
+            export_menu, "Найденные &импульсы как CSV...", self.export_impulses_csv
         )
         file_menu.addSeparator()
-        self._quit_action = self._action(file_menu, "&Quit", self.close, "Ctrl+Q")
+        self._quit_action = self._action(file_menu, "&Выход", self.close, "Ctrl+Q")
 
-        edit_menu = bar.addMenu("&Edit")
-        self._settings_action = self._action(edit_menu, "&Settings...", self.open_settings, "Ctrl+,")
+        edit_menu = bar.addMenu("&Правка")
+        self._settings_action = self._action(edit_menu, "&Настройки...", self.open_settings, "Ctrl+,")
 
-        help_menu = bar.addMenu("&Help")
-        self._about_action = self._action(help_menu, f"&About {APP_NAME}", self.show_about, "F1")
+        help_menu = bar.addMenu("&Справка")
+        self._about_action = self._action(help_menu, f"&О программе {APP_NAME}", self.show_about, "F1")
 
     def _build_status_bar(self) -> None:
         bar = self.statusBar()
-        self._state_label = QLabel("Ready")
+        self._state_label = QLabel("Готово")
         self._state_label.setObjectName("status")
-        self._signal_label = QLabel("No signal")
-        self._library_label = QLabel("Library: -")
+        self._signal_label = QLabel("Нет сигнала")
+        self._library_label = QLabel("Библиотека: -")
         for label in (self._state_label, self._signal_label, self._library_label):
             bar.addPermanentWidget(label)
 
@@ -362,29 +362,29 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(text, _INFO_MESSAGE_MS)
 
     def _show_error(self, text: str) -> None:
-        self.statusBar().showMessage(f"Error: {text}" if not text.startswith("Error") else text, _ERROR_MESSAGE_MS)
+        self.statusBar().showMessage(f"Ошибка: {text}" if not text.startswith("Ошибка") else text, _ERROR_MESSAGE_MS)
 
     def _refresh_state(self, *_: object) -> None:
         ctx = self._ctx
         rec, ana = ctx.recording_vm, ctx.analysis_vm
         if rec.is_recording:
-            state = "Paused" if rec.is_paused else "Recording"
+            state = "Пауза" if rec.is_paused else "Запись"
         elif rec.has_unsaved_recording:
-            state = "Unsaved recording"
+            state = "Несохранённая запись"
         elif ana.is_busy:
-            state = "Analyzing..."
+            state = "Анализ..."
         elif ctx.library_vm.is_loading:
-            state = "Loading recording..."
+            state = "Загрузка записи..."
         else:
-            state = "Ready"
+            state = "Готово"
         self._state_label.setText(state)
 
         if ana.current_data.size:
             duration = ana.current_data.size / max(1, ana.current_sample_rate)
-            self._signal_label.setText(f"Signal: {duration:.3f} s at {ana.current_sample_rate} Hz")
+            self._signal_label.setText(f"Сигнал: {duration:.3f} с, {ana.current_sample_rate} Гц")
         else:
-            self._signal_label.setText("No signal")
-        self._library_label.setText(f"Library: {len(ctx.library_vm.recordings)} recordings")
+            self._signal_label.setText("Нет сигнала")
+        self._library_label.setText(f"Библиотека: записей — {len(ctx.library_vm.recordings)}")
 
         has_signal = ana.current_data.size > 0
         for action in (self._save_action, self._export_png_action, self._export_wav_action, self._export_csv_action):
@@ -401,7 +401,7 @@ class MainWindow(QMainWindow):
     def _on_record_audio(self, samples: np.ndarray, sample_rate: int, label: str) -> None:
         """A recording was saved (or a file loaded) on the Record tab: analyse it."""
         self._analysis_tab.set_signal(samples, sample_rate, label)
-        self._show_info(f"'{label}' is ready in the Analysis tab.")
+        self._show_info(f"«{label}» открыт на вкладке «Анализ».")
 
     def open_recording(self, session: RecordingSession, samples: np.ndarray) -> None:
         """Show a library recording in the Analysis tab and switch to it."""
@@ -422,11 +422,11 @@ class MainWindow(QMainWindow):
         """
         analysis = self._ctx.analysis_vm
         if analysis.current_data.size == 0:
-            self._show_info("There is no signal to save.")
+            self._show_info("Нет сигнала для сохранения.")
             return
         if title is None:
             title, accepted = QInputDialog.getText(
-                self, "Save as new recording", "Title:", text=self._analysis_tab.label or _FALLBACK_TITLE
+                self, "Сохранить как новую запись", "Название:", text=self._analysis_tab.label or _FALLBACK_TITLE
             )
             if not accepted:
                 return
@@ -434,16 +434,16 @@ class MainWindow(QMainWindow):
         worker = AnalysisWorker(
             self._ctx.project_manager.save_recording,
             (data, analysis.current_sample_rate, title.strip() or _FALLBACK_TITLE, "",
-             "Saved from the Analysis tab", "microphone"),
+             "Сохранено из вкладки «Анализ»", "microphone"),
             task_name="save_recording",
         )
         worker.result_ready.connect(self._on_signal_saved)
-        worker.error.connect(lambda _name, message: self._show_error(f"Cannot save the recording: {message}"))
+        worker.error.connect(lambda _name, message: self._show_error(f"Не удалось сохранить запись: {message}"))
         self._start_worker(worker)
 
     def _on_signal_saved(self, _name: str, session: RecordingSession) -> None:
         self._ctx.library_vm.refresh()
-        self._show_info(f"Saved '{session.title}' to the library.")
+        self._show_info(f"«{session.title}» сохранена в библиотеку.")
 
     def _start_worker(self, worker: Any) -> None:
         self._workers.add(worker)
@@ -451,8 +451,8 @@ class MainWindow(QMainWindow):
         worker.start()
 
     def _export(self, worker: ExportWorker) -> None:
-        worker.export_complete.connect(lambda path: self._show_info(f"Exported: {path}"))
-        worker.export_error.connect(lambda message: self._show_error(f"Export failed: {message}"))
+        worker.export_complete.connect(lambda path: self._show_info(f"Экспортировано: {path}"))
+        worker.export_error.connect(lambda message: self._show_error(f"Ошибка экспорта: {message}"))
         self._start_worker(worker)
 
     def _export_path(self, path: str | Path | None, caption: str, suffix: str, name_filter: str) -> Path | None:
@@ -469,9 +469,9 @@ class MainWindow(QMainWindow):
         """File > Export > Signal as WAV (bit depth from Settings; 32-bit float if the signal exceeds full scale)."""
         analysis = self._ctx.analysis_vm
         if analysis.current_data.size == 0:
-            self._show_info("There is no signal to export.")
+            self._show_info("Нет сигнала для экспорта.")
             return
-        target = self._export_path(path, "Export signal as WAV", ".wav", "WAV (*.wav)")
+        target = self._export_path(path, "Экспорт сигнала в WAV", ".wav", "WAV (*.wav)")
         if target is None:
             return
         peak = float(np.max(np.abs(analysis.current_data)))
@@ -484,9 +484,9 @@ class MainWindow(QMainWindow):
         """File > Export > Signal as CSV (index, time_s, value)."""
         analysis = self._ctx.analysis_vm
         if analysis.current_data.size == 0:
-            self._show_info("There is no signal to export.")
+            self._show_info("Нет сигнала для экспорта.")
             return
-        target = self._export_path(path, "Export signal as CSV", ".csv", "CSV (*.csv)")
+        target = self._export_path(path, "Экспорт сигнала в CSV", ".csv", "CSV (*.csv)")
         if target is None:
             return
         self._export(
@@ -496,9 +496,9 @@ class MainWindow(QMainWindow):
     def export_plot_png(self, path: str | Path | None = None) -> None:
         """File > Export > Current plot as PNG."""
         if self._analysis_tab.export_plot_png(path):
-            self._show_info("Plot exported.")
+            self._show_info("График экспортирован.")
         elif path is not None:
-            self._show_error("The plot could not be exported.")
+            self._show_error("Не удалось экспортировать график.")
 
     def export_segment_wav(self, path: str | Path | None = None) -> None:
         """File > Export > Selected segment as WAV."""
@@ -513,21 +513,21 @@ class MainWindow(QMainWindow):
         dialog = self._settings_dialog_factory(self._ctx.settings, self)
         if dialog.exec():
             self._record_tab.reload_settings()
-            self._show_info("Settings saved.")
+            self._show_info("Настройки сохранены.")
 
     def about_text(self) -> str:
         """The text of the About box."""
         return (
             f"<h3>{APP_NAME} {__version__}</h3>"
-            "<p>Ultrasound signal analysis workstation: record from a microphone or a COM-port "
-            "sensor, analyse with FFT, STFT and Morlet wavelet transforms, detect impulses and "
-            "keep a library of recordings.</p>"
-            "<p>Built with PySide6, pyqtgraph, NumPy and SciPy.</p>"
+            "<p>Рабочее место анализа ультразвуковых сигналов: запись с микрофона или датчика "
+            "через COM-порт, анализ с помощью БПФ, STFT и вейвлет-преобразования Морле, поиск импульсов и "
+            "библиотека записей.</p>"
+            "<p>Создано на PySide6, pyqtgraph, NumPy и SciPy.</p>"
         )
 
     def show_about(self) -> None:
         """Help > About."""
-        QMessageBox.about(self, f"About {APP_NAME}", self.about_text())
+        QMessageBox.about(self, f"О программе {APP_NAME}", self.about_text())
 
     # ================================================================== closing
     def _confirm_close(self) -> bool:
@@ -589,6 +589,15 @@ class MainWindow(QMainWindow):
 
 
 # ========================================================================= main
+def _install_qt_translations(app: QApplication) -> None:
+    """Russian texts of Qt's own dialogs and buttons (OK, Cancel, file dialogs...)."""
+    translator = QTranslator(app)
+    path = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
+    if translator.load("qtbase_ru", path):
+        app.installTranslator(translator)
+        app._qt_translator = translator  # type: ignore[attr-defined]  # keep it alive
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Create the application and its window and run the event loop.
 
@@ -604,6 +613,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(__version__)
     app.setWindowIcon(load_icon())
+    _install_qt_translations(app)
 
     window = MainWindow()
     window.show()

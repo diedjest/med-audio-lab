@@ -68,7 +68,7 @@ class LibraryViewModel(QObject):
         try:
             recordings = self._pm.list_recordings()
         except Exception as exc:
-            self.error_occurred.emit(f"Cannot read the recording library: {exc}")
+            self.error_occurred.emit(f"Не удалось прочитать библиотеку записей: {exc}")
             return
         self._recordings = list(recordings)
         self.recordings_changed.emit()
@@ -115,7 +115,7 @@ class LibraryViewModel(QObject):
         ``report_exported(path)`` or ``error_occurred(message)``.
         """
         if self._export is None:
-            self.error_occurred.emit("Reports cannot be exported: no export service is configured.")
+            self.error_occurred.emit("Отчёты нельзя экспортировать: сервис экспорта не настроен.")
             return
         worker = AnalysisWorker(
             self._build_report, (int(recording_id), str(path)), task_name="export_report"
@@ -129,7 +129,7 @@ class LibraryViewModel(QObject):
     def _build_report(self, recording_id: int, path: str) -> str:
         session = self._pm.get_recording(recording_id)
         if session is None:
-            raise RecordingNotFoundError(f"Recording {recording_id} not found.")
+            raise RecordingNotFoundError(f"Запись {recording_id} не найдена.")
         metrics = self._pm.ensure_metrics(recording_id)
         assert self._export is not None
         self._export.export_report_csv(session, metrics, path)

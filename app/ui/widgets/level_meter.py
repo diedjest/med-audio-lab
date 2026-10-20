@@ -42,7 +42,7 @@ class LevelMeter(QWidget):
 
         self.setMinimumSize(120, 22)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.setAccessibleName("Level meter")
+        self.setAccessibleName("Индикатор уровня")
 
         self._timer = QTimer(self)
         self._timer.setInterval(_TICK_MS)
@@ -139,7 +139,7 @@ class LevelMeter(QWidget):
         font.setPointSizeF(max(7.0, font.pointSizeF() - 1.0))
         painter.setFont(font)
         painter.setPen(_COLOR_TEXT)
-        text = "-inf dB" if self._rms <= MIN_DBFS else f"{self._rms:.1f} dB"
+        text = "-∞ дБ" if self._rms <= MIN_DBFS else f"{self._rms:.1f} дБ"
         painter.drawText(track.adjusted(0, 0, -6, 0), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, text)
 
 

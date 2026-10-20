@@ -151,12 +151,12 @@ class RecordingService(QObject):
 
     def _can_start(self) -> bool:
         if self._active is not None:
-            self.error_occurred.emit("A recording is already in progress.")
+            self.error_occurred.emit("Запись уже идёт.")
             return False
         if self._pending is not None:
             self.error_occurred.emit(
-                "The previous recording has not been saved. Call stop_and_save() to "
-                "retry, or discard_unsaved() to drop it."
+                "Предыдущая запись не сохранена. Повторите сохранение "
+                "или отбросьте её."
             )
             return False
         return True
@@ -167,7 +167,7 @@ class RecordingService(QObject):
             for name, value in values.items():
                 setattr(self._settings, name, value)
         except Exception as exc:
-            self.error_occurred.emit(f"Could not save settings: {exc}")
+            self.error_occurred.emit(f"Не удалось сохранить настройки: {exc}")
 
     # -------------------------------------------------------------- start
     def start_audio(self, device_index: int | None, sample_rate: int) -> bool:
@@ -181,7 +181,7 @@ class RecordingService(QObject):
         try:
             self._audio.start(device_index, int(sample_rate), 1, "float32", DEFAULT_BLOCK_SIZE)
         except Exception as exc:
-            self.error_occurred.emit(f"Cannot start audio capture: {exc}")
+            self.error_occurred.emit(f"Не удалось начать запись звука: {exc}")
             return False
 
         self._remember(
@@ -208,12 +208,12 @@ class RecordingService(QObject):
         if not self._can_start():
             return False
         if int(analysis_rate) <= 0 or int(baudrate) <= 0:
-            self.error_occurred.emit("Baud rate and analysis rate must be positive.")
+            self.error_occurred.emit("Скорость и частота анализа должны быть положительными.")
             return False
         try:
             self._serial.start(port, int(baudrate))
         except Exception as exc:
-            self.error_occurred.emit(f"Cannot start serial capture: {exc}")
+            self.error_occurred.emit(f"Не удалось начать приём из COM-порта: {exc}")
             return False
 
         self._remember(
@@ -248,7 +248,7 @@ class RecordingService(QObject):
         try:
             self._active.pause()
         except Exception as exc:
-            self.error_occurred.emit(f"Cannot pause: {exc}")
+            self.error_occurred.emit(f"Не удалось поставить на паузу: {exc}")
             return
         self._paused = True
         self._timer.stop()
@@ -261,7 +261,7 @@ class RecordingService(QObject):
         try:
             self._active.resume()
         except Exception as exc:
-            self.error_occurred.emit(f"Cannot resume: {exc}")
+            self.error_occurred.emit(f"Не удалось продолжить запись: {exc}")
             return
         self._paused = False
         self._timer.start()
@@ -287,7 +287,7 @@ class RecordingService(QObject):
         engine = self._active
         if engine is None:
             if self._pending is None:
-                self.error_occurred.emit("No recording in progress.")
+                self.error_occurred.emit("Запись не идёт.")
                 return None
             return self._save_pending(title, patient, notes)
 
@@ -299,7 +299,7 @@ class RecordingService(QObject):
             info = self._stop_info(engine, source, rate)
         except Exception as exc:
             self._reset()
-            self.error_occurred.emit(f"Error while stopping capture: {exc}")
+            self.error_occurred.emit(f"Ошибка при остановке записи: {exc}")
             return None
         self._reset()
 
@@ -311,7 +311,7 @@ class RecordingService(QObject):
         min_samples = 3 if source == SOURCE_SERIAL else max(256, rate // 20)
         if x.size < min_samples:
             self.error_occurred.emit(
-                f"Too little data captured ({x.size} samples); the recording was not saved."
+                f"Записано слишком мало данных (отсчётов: {x.size}), запись не сохранена."
             )
             return None
 
@@ -330,7 +330,7 @@ class RecordingService(QObject):
             try:
                 engine.stop()
             except Exception as exc:
-                self.error_occurred.emit(f"Error while stopping capture: {exc}")
+                self.error_occurred.emit(f"Ошибка при остановке записи: {exc}")
         self._reset()
         self._pending = None
 
@@ -365,8 +365,8 @@ class RecordingService(QObject):
             )
         except Exception as exc:
             self.error_occurred.emit(
-                f"Cannot save recording: {exc}. The captured data is kept in memory; "
-                "call stop_and_save() again to retry."
+                f"Не удалось сохранить запись: {exc}. Записанные данные остались в памяти; "
+                "повторите сохранение."
             )
             return None
         self._pending = None
@@ -393,7 +393,7 @@ class RecordingService(QObject):
             if not self._error_reported:
                 self._error_reported = True
                 self.error_occurred.emit(
-                    "Capture stopped unexpectedly. Call stop_and_save() to keep the data."
+                    "Запись неожиданно прервалась. Сохраните уже записанные данные."
                 )
             return
 

@@ -156,10 +156,10 @@ class ProjectManager:
         """
         session = self._repository.get_recording(recording_id)
         if session is None:
-            raise RecordingNotFoundError(f"Recording {recording_id} not found.")
+            raise RecordingNotFoundError(f"Запись {recording_id} не найдена.")
         if not Path(session.file_path).is_file():
             raise FileNotFoundError(
-                f"Audio file for recording {recording_id} is missing: {session.file_path}"
+                f"Аудиофайл записи {recording_id} не найден: {session.file_path}"
             )
         _, samples = file_io.read_wav(
             session.file_path, mono=True, normalize=True, keep_float_level=True
@@ -179,7 +179,7 @@ class ProjectManager:
         """
         session = self._repository.get_recording(recording_id)
         if session is None or not self._repository.delete_recording(recording_id):
-            raise RecordingNotFoundError(f"Recording {recording_id} not found.")
+            raise RecordingNotFoundError(f"Запись {recording_id} не найдена.")
         if not delete_file:
             return
 
@@ -192,8 +192,8 @@ class ProjectManager:
             path.unlink()
         except OSError as exc:
             raise OSError(
-                f"Recording {recording_id} was removed from the library, but its file "
-                f"could not be deleted: {exc}"
+                f"Запись {recording_id} удалена из библиотеки, но её файл "
+                f"удалить не удалось: {exc}"
             ) from exc
 
     def get_recording(self, recording_id: int) -> RecordingSession | None:

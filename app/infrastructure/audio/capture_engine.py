@@ -170,7 +170,7 @@ class CaptureEngine(IAudioCaptureEngine):
 
         with self._state_lock:
             if self._recording:
-                raise AudioCaptureError("Capture is already running.")
+                raise AudioCaptureError("Запись уже идёт.")
 
             if self._ring.channels != channels:
                 self._ring = RingBuffer(RING_BUFFER_CAPACITY, np.float32, channels=channels)
@@ -212,7 +212,7 @@ class CaptureEngine(IAudioCaptureEngine):
                         stream.close()
                     except sd.PortAudioError:
                         pass
-                error = AudioCaptureError(f"Cannot open input device {device_index}: {exc}")
+                error = AudioCaptureError(f"Не удалось открыть устройство ввода {device_index}: {exc}")
                 error.__cause__ = exc
                 self._emit_error(error)
                 raise error from exc
@@ -255,11 +255,11 @@ class CaptureEngine(IAudioCaptureEngine):
                 try:
                     stream.stop()
                 except sd.PortAudioError as exc:
-                    self._emit_error(AudioCaptureError(f"Error stopping stream: {exc}"))
+                    self._emit_error(AudioCaptureError(f"Ошибка остановки потока: {exc}"))
                 try:
                     stream.close()
                 except sd.PortAudioError as exc:
-                    self._emit_error(AudioCaptureError(f"Error closing stream: {exc}"))
+                    self._emit_error(AudioCaptureError(f"Ошибка закрытия потока: {exc}"))
 
             self._stop_event.set()
             if thread is not None and thread is not threading.current_thread():
@@ -312,7 +312,7 @@ class CaptureEngine(IAudioCaptureEngine):
         if dropped > self._reported_dropped:
             self._reported_dropped = dropped
             self._emit_error(
-                AudioCaptureError(f"{dropped} samples dropped: accumulator fell behind.")
+                AudioCaptureError(f"Потеряно отсчётов: {dropped} (накопитель не успевает).")
             )
 
     def _accumulate_loop(self) -> None:

@@ -183,7 +183,7 @@ class AnalysisPlot(PlotWidgetBase):
         self._y_label = ""
         self._spectrum: _SpectrumData | None = None
         self._plot.scene().sigMouseClicked.connect(self._on_scene_clicked)
-        self.clear("No data")
+        self.clear("Нет данных")
 
     # ------------------------------------------------------------- state
     @property
@@ -232,7 +232,7 @@ class AnalysisPlot(PlotWidgetBase):
         self._hide_placeholder()
 
     # ------------------------------------------------------------ drawing
-    def clear(self, message: str = "No data") -> None:
+    def clear(self, message: str = "Нет данных") -> None:
         """Remove everything and show ``message``."""
         self._clear_extras()
         self._curve.setData([], [])
@@ -266,7 +266,7 @@ class AnalysisPlot(PlotWidgetBase):
         if xs.size != ys.size:
             raise ValueError(f"x ({xs.size}) and y ({ys.size}) must have the same length")
         if xs.size == 0:
-            self.clear("No data")
+            self.clear("Нет данных")
             return
 
         self._clear_extras()
@@ -315,7 +315,7 @@ class AnalysisPlot(PlotWidgetBase):
         """
         z = np.ascontiguousarray(values, dtype=np.float32)
         if z.ndim != 2 or z.size == 0:
-            self.clear("No data")
+            self.clear("Нет данных")
             return
 
         self._clear_extras()
@@ -372,7 +372,7 @@ class AnalysisPlot(PlotWidgetBase):
             fi = min(int((y - y0) / (y1 - y0) * data.shape[1]), data.shape[1] - 1)
             frequency = 10.0**y if self._log_freq else y
             return (
-                f"Time: {x:.4f} s\nFrequency: {frequency:.1f} Hz"
+                f"Время: {x:.4f} с\nЧастота: {frequency:.1f} Гц"
                 f"\n{value_label}: {data[ti, fi]:.1f}"
             )
         return None
@@ -443,7 +443,7 @@ class SpectrogramWidget(QWidget):
         self._kind = "empty"
         self._title = ""
         self._plot.clicked.connect(self.clicked)
-        self.clear("Load or record a signal, then choose an analysis")
+        self.clear("Загрузите или запишите сигнал, затем выберите анализ")
 
     # ------------------------------------------------------------- access
     @property
@@ -470,7 +470,7 @@ class SpectrogramWidget(QWidget):
         page = self._stack.currentWidget()
         return self._waveform.placeholder_text if page is self._waveform else self._plot.placeholder_text
 
-    def clear(self, message: str = "No data") -> None:
+    def clear(self, message: str = "Нет данных") -> None:
         """Remove the plot and show ``message``."""
         self._kind = "empty"
         self._title = ""
@@ -497,7 +497,7 @@ class SpectrogramWidget(QWidget):
         }
         handler = handlers.get(plot_type)
         if handler is None:
-            raise ValueError(f"Unknown plot type {plot_type!r}; known: {sorted(handlers)}")
+            raise ValueError(f"Неизвестный тип графика {plot_type!r}; допустимые: {sorted(handlers)}")
         handler(payload)
         self._kind = plot_type
 
@@ -528,7 +528,7 @@ class SpectrogramWidget(QWidget):
         if self._stack.currentWidget() is self._waveform:
             return self._waveform.export_png(path)
         if path is None:
-            chosen, _ = QFileDialog.getSaveFileName(self, "Export PNG", "analysis.png", "PNG image (*.png)")
+            chosen, _ = QFileDialog.getSaveFileName(self, "Экспорт в PNG", "analysis.png", "Изображение PNG (*.png)")
             if not chosen:
                 return False
             path = chosen
@@ -543,20 +543,20 @@ class SpectrogramWidget(QWidget):
         if selection is not None:
             self._waveform.set_selection(*selection)
         self._stack.setCurrentWidget(self._waveform)
-        self._title = "Waveform (filtered)" if payload.get("filtered") else "Waveform"
+        self._title = "Сигнал (отфильтрованный)" if payload.get("filtered") else "Сигнал"
 
     def _show_envelope(self, payload: dict[str, Any]) -> None:
         self._waveform.set_data(payload["signal"], payload["sample_rate"])
         self._waveform.set_overlay(payload["data"], COLOR_PEAK)
         self._stack.setCurrentWidget(self._waveform)
-        self._title = "Envelope"
+        self._title = "Огибающая"
 
     def _show_impulses(self, payload: dict[str, Any]) -> None:
         impulses = payload["impulses"]
         self._waveform.set_data(payload["data"], payload["sample_rate"])
         self._waveform.set_regions([(i.start_s, i.end_s) for i in impulses])
         self._stack.setCurrentWidget(self._waveform)
-        self._title = f"Impulses ({len(impulses)})"
+        self._title = f"Импульсы ({len(impulses)})"
 
     # -------------------------------------------------------- line plots
     def _xy(self, title: str, *args: Any, **kwargs: Any) -> None:
@@ -568,12 +568,12 @@ class SpectrogramWidget(QWidget):
         freqs, mags = payload["freqs_hz"], payload["magnitudes"]
         peak_hz = payload.get("peak_hz", 0.0)
         annotations = (
-            [{"x": peak_hz, "y": payload["peak_magnitude"], "label": f"{peak_hz:.1f} Hz"}] if peak_hz else []
+            [{"x": peak_hz, "y": payload["peak_magnitude"], "label": f"{peak_hz:.1f} Гц"}] if peak_hz else []
         )
         self._xy(
-            "FFT spectrum", freqs, mags, x_label="Frequency (Hz)", y_label="Magnitude",
+            "Спектр (БПФ)", freqs, mags, x_label="Частота (Гц)", y_label="Магнитуда",
             color=COLOR_WAVEFORM, annotations=annotations,
-            note=f"Peak: {peak_hz:.1f} Hz" if peak_hz else "",
+            note=f"Пик: {peak_hz:.1f} Гц" if peak_hz else "",
         )
 
     def _show_psd(self, payload: dict[str, Any]) -> None:
@@ -583,25 +583,25 @@ class SpectrogramWidget(QWidget):
         note = ""
         if psd_db.size:
             peak = int(np.argmax(psd_db))
-            annotations = [{"x": float(freqs[peak]), "y": float(psd_db[peak]), "label": f"{freqs[peak]:.1f} Hz"}]
-            note = f"Peak: {freqs[peak]:.1f} Hz"
+            annotations = [{"x": float(freqs[peak]), "y": float(psd_db[peak]), "label": f"{freqs[peak]:.1f} Гц"}]
+            note = f"Пик: {freqs[peak]:.1f} Гц"
         self._xy(
-            "Power spectral density (Welch)", freqs, psd_db, x_label="Frequency (Hz)",
-            y_label="PSD (dB/Hz)", color=COLOR_SPECTRUM, annotations=annotations, note=note,
+            "Спектральная плотность мощности (Уэлч)", freqs, psd_db, x_label="Частота (Гц)",
+            y_label="СПМ (дБ/Гц)", color=COLOR_SPECTRUM, annotations=annotations, note=note,
         )
 
     def _show_autocorrelation(self, payload: dict[str, Any]) -> None:
         lags, corr = np.asarray(payload["lags_ms"]), np.asarray(payload["correlation"])
         annotations: list[dict[str, Any]] = []
-        note = "A peak near 0 ms is expected"
+        note = "Пик около 0 мс — ожидаемо"
         idx = _first_autocorrelation_peak(corr)
         if idx is not None:
             lag = float(lags[idx])
-            annotations.append({"x": lag, "y": float(corr[idx]), "label": f"period {lag:.2f} ms"})
+            annotations.append({"x": lag, "y": float(corr[idx]), "label": f"период {lag:.2f} мс"})
             if lag > 0:
-                note += f"\nEstimated frequency: {1000.0 / lag:.1f} Hz"
+                note += f"\nОценка частоты: {1000.0 / lag:.1f} Гц"
         self._xy(
-            "Autocorrelation", lags, corr, x_label="Lag (ms)", y_label="Coefficient",
+            "Автокорреляция", lags, corr, x_label="Задержка (мс)", y_label="Коэффициент",
             color=COLOR_SPECTRUM, annotations=annotations, note=note,
         )
 
@@ -609,16 +609,16 @@ class SpectrogramWidget(QWidget):
         t_rel = np.asarray(payload["time_rel_s"], dtype=np.float64)
         half = max(abs(float(t_rel[0])), abs(float(t_rel[-1]))) if t_rel.size else 0.0
         if half >= 0.1:
-            scale, unit = 1.0, "s"
+            scale, unit = 1.0, "с"
         elif half >= 1e-3:
-            scale, unit = 1e3, "ms"
+            scale, unit = 1e3, "мс"
         else:
-            scale, unit = 1e6, "us"
+            scale, unit = 1e6, "мкс"
         frequency = float(payload["frequency_hz"])
         self._xy(
-            f"Wavelet slice: Re(Wx) at {frequency:.1f} Hz", t_rel * scale, payload["values"],
-            x_label=f"Time relative to the centre ({unit})", y_label="Normalized amplitude",
-            note=f"f = {frequency:.1f} Hz",
+            f"Срез вейвлета: Re(Wx) при {frequency:.1f} Гц", t_rel * scale, payload["values"],
+            x_label=f"Время относительно центра ({unit})", y_label="Нормированная амплитуда",
+            note=f"f = {frequency:.1f} Гц",
         )
 
     # ------------------------------------------------------------ heat maps
@@ -627,28 +627,28 @@ class SpectrogramWidget(QWidget):
         freqs = np.asarray(payload["frequencies_hz"], dtype=np.float64)
         db = np.asarray(payload["magnitude_db"])
         if db.size == 0:
-            self._plot.clear("No data")
+            self._plot.clear("Нет данных")
             self._stack.setCurrentWidget(self._plot)
             return
         shown = _reduce_columns(db.shape[1], MAX_IMAGE_COLUMNS, lambda a, b: db[:, a:b].astype(np.float32))
         vmax = float(np.max(db))
         vmin = max(vmax - STFT_DYNAMIC_RANGE_DB, float(np.min(db)))
         dt = float(np.median(np.diff(time))) if time.size > 1 else 1.0
-        spectrum = _SpectrumData("stft", time, freqs, lambda i: db[:, i], lambda i: db[i, :], "Magnitude (dB)")
+        spectrum = _SpectrumData("stft", time, freqs, lambda i: db[:, i], lambda i: db[i, :], "Магнитуда (дБ)")
         self._plot.show_image(
             shown,
             t_range=(float(time[0]) - dt / 2, float(time[-1]) + dt / 2),
             f_range=(float(freqs[0]), float(freqs[-1])),
             log_freq=False,
             levels=(vmin, vmax),
-            title="STFT spectrogram",
-            y_label="Frequency (Hz)",
-            colorbar_label="dB",
-            note="Left click: time slice at that frequency\nRight click: spectrum slice at that time",
+            title="Спектрограмма STFT",
+            y_label="Частота (Гц)",
+            colorbar_label="дБ",
+            note="Левый щелчок: срез по времени на этой частоте\nПравый щелчок: срез спектра в этот момент",
             spectrum=spectrum,
         )
         self._stack.setCurrentWidget(self._plot)
-        self._title = "STFT spectrogram"
+        self._title = "Спектрограмма STFT"
 
     def _show_cwt(self, payload: dict[str, Any]) -> None:
         result = payload["result"]
@@ -656,7 +656,7 @@ class SpectrogramWidget(QWidget):
         freqs = np.asarray(result.frequencies_hz, dtype=np.float64)
         time = np.asarray(result.time, dtype=np.float64)
         if coefficients.size == 0:
-            self._plot.clear("No data")
+            self._plot.clear("Нет данных")
             self._stack.setCurrentWidget(self._plot)
             return
 
@@ -682,25 +682,25 @@ class SpectrogramWidget(QWidget):
             "cwt", time, freqs,
             lambda i: np.abs(coefficients[:, i]).astype(np.float64),
             lambda i: np.abs(coefficients[i, :]).astype(np.float64),
-            "Amplitude |Wx|",
+            "Амплитуда |Wx|",
         )
-        note = "Left click: wavelet slice at that frequency\nRight click: spectrum slice at that time"
+        note = "Левый щелчок: срез вейвлета на этой частоте\nПравый щелчок: срез спектра в этот момент"
         if payload.get("max_seconds"):
-            note = f"Limited to the first {payload['max_seconds']:.2f} s\n" + note
+            note = f"Ограничено первыми {payload['max_seconds']:.2f} с\n" + note
         self._plot.show_image(
             shown,
             t_range=(float(time[0]) - dt / 2, float(time[-1]) + dt / 2),
             f_range=(float(f_sorted[0]), float(f_sorted[-1] if f_sorted[-1] > f_sorted[0] else f_sorted[0] * 1.01)),
             log_freq=True,
             levels=(-CWT_DYNAMIC_RANGE_DB, 0.0),
-            title="Morlet CWT",
-            y_label="Frequency (Hz)",
-            colorbar_label="dB re max",
+            title="CWT Морле",
+            y_label="Частота (Гц)",
+            colorbar_label="дБ отн. макс.",
             note=note,
             spectrum=spectrum,
         )
         self._stack.setCurrentWidget(self._plot)
-        self._title = "Morlet CWT"
+        self._title = "CWT Морле"
 
 
 __all__: list[str] = ["SpectrogramWidget", "AnalysisPlot", "format_frequency"]

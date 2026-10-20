@@ -221,7 +221,7 @@ def test_missing_file(tmp_path: Path) -> None:
 def test_empty_file(temp_path: Callable[[str], Path]) -> None:
     path = temp_path(".wav")  # NamedTemporaryFile creates it empty
 
-    with pytest.raises(ValueError, match="empty"):
+    with pytest.raises(ValueError, match="пуст"):
         file_io.read_wav(path)
 
 
@@ -229,7 +229,7 @@ def test_file_that_is_not_audio(temp_path: Callable[[str], Path]) -> None:
     path = temp_path(".wav")
     path.write_bytes(b"this is certainly not a RIFF file" * 4)
 
-    with pytest.raises(ValueError, match="decode"):
+    with pytest.raises(ValueError, match="прочитать"):
         file_io.read_wav(path)
 
 
@@ -335,7 +335,7 @@ def test_txt_without_numbers_is_rejected(temp_path: Callable[[str], Path]) -> No
     path = temp_path(".txt")
     path.write_text("no numbers here\n", encoding="utf-8")
 
-    with pytest.raises(ValueError, match="No numeric data"):
+    with pytest.raises(ValueError, match="нет числовых данных"):
         file_io.read_txt_as_audio(path)
 
 
@@ -356,5 +356,5 @@ def test_txt_to_wav_needs_a_rate_for_a_single_column(temp_path: Callable[[str], 
     source = temp_path(".txt")
     source.write_text("1\n2\n3\n", encoding="utf-8")
 
-    with pytest.raises(ValueError, match="sample rate"):
+    with pytest.raises(ValueError, match="частот"):
         file_io.txt_to_wav(source, tmp_path / "x.wav")

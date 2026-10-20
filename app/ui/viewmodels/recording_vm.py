@@ -19,9 +19,9 @@ from app.services.recording_service import (
 )
 from app.services.settings_service import VALID_SOURCES, SettingsService
 
-STATUS_READY = "Ready"
-LABEL_DEFAULT_INPUT = "Default input device"
-LABEL_NO_PORT = "No serial port selected"
+STATUS_READY = "Готово"
+LABEL_DEFAULT_INPUT = "Устройство ввода по умолчанию"
+LABEL_NO_PORT = "COM-порт не выбран"
 
 
 class RecordingViewModel(QObject):
@@ -115,7 +115,7 @@ class RecordingViewModel(QObject):
             return self._audio_device.label
         if self._device_index is None:
             return LABEL_DEFAULT_INPUT
-        return f"Device {self._device_index}"
+        return f"Устройство {self._device_index}"
 
     def _set_status(self, text: str) -> None:
         if text != self._status_text:
@@ -154,7 +154,7 @@ class RecordingViewModel(QObject):
 
     def _fail(self, message: str) -> None:
         """Report a problem detected by the view model itself."""
-        self._set_status(f"Error: {message}")
+        self._set_status(f"Ошибка: {message}")
         self.error_occurred.emit(message)
 
     def _remember(self, **values: object) -> None:
@@ -162,7 +162,7 @@ class RecordingViewModel(QObject):
             for name, value in values.items():
                 setattr(self._settings, name, value)
         except Exception as exc:  # settings are a convenience; never block the UI
-            self._fail(f"Could not save settings: {exc}")
+            self._fail(f"Не удалось сохранить настройки: {exc}")
 
     def _set_input(self, attr: str, value: object, signal: Signal) -> None:
         if getattr(self, attr) != value:
@@ -266,11 +266,11 @@ class RecordingViewModel(QObject):
     def on_start_recording(self) -> None:
         """Start capturing from the selected source and device."""
         if self._service.is_recording:
-            self._fail("A recording is already in progress.")
+            self._fail("Запись уже идёт.")
             return
         if self._current_source == SOURCE_SERIAL:
             if not self._serial_port:
-                self._fail("No serial port selected.")
+                self._fail("COM-порт не выбран.")
                 return
             self._service.start_serial(self._serial_port, self._baudrate, self._analysis_rate)
         else:
@@ -297,7 +297,7 @@ class RecordingViewModel(QObject):
         thread briefly (up to ~2 s) while the capture threads finish.
         """
         if not self._service.is_recording and not self._service.has_unsaved_recording:
-            self._fail("No recording in progress.")
+            self._fail("Запись не идёт.")
             return
         self._service.stop_and_save(self._title, self._patient, self._notes)
         self._sync_state()
@@ -307,23 +307,23 @@ class RecordingViewModel(QObject):
         """Drop a capture that could not be saved."""
         self._service.discard_unsaved()
         self._sync_state()
-        self._set_status("Discarded the unsaved recording.")
+        self._set_status("Несохранённая запись отброшена.")
 
     @Slot()
     def on_abort_recording(self) -> None:
         """Stop the running recording and discard its audio (nothing is saved)."""
         self._service.abort()
         self._sync_state()
-        self._set_status("Recording discarded.")
+        self._set_status("Запись отброшена.")
 
     @Slot(str)
     def on_source_changed(self, source: str) -> None:
         """Switch between ``"microphone"`` and ``"serial"`` (not while recording)."""
         if source not in VALID_SOURCES:
-            self._fail(f"Unknown source {source!r}.")
+            self._fail(f"Неизвестный источник {source!r}.")
             return
         if self._service.is_recording:
-            self._fail("Cannot change the source while recording.")
+            self._fail("Нельзя менять источник во время записи.")
             return
         if source == self._current_source:
             return
@@ -341,7 +341,7 @@ class RecordingViewModel(QObject):
         resets to the default device / no port.  Not allowed while recording.
         """
         if self._service.is_recording:
-            self._fail("Cannot change the device while recording.")
+            self._fail("Нельзя менять устройство во время записи.")
             return
 
         if device is None:
@@ -351,38 +351,38 @@ class RecordingViewModel(QObject):
                 self._device_index, self._audio_device = None, None
         elif isinstance(device, AudioDeviceInfo):
             if self._current_source != SOURCE_MICROPHONE:
-                self._fail("An audio device cannot be used with the serial source.")
+                self._fail("Аудиоустройство нельзя использовать с источником COM-порт.")
                 return
             self._device_index, self._audio_device = device.index, device
             if device.default_sample_rate > 0:
                 self.sample_rate = device.default_sample_rate
         elif isinstance(device, SerialPortInfo):
             if self._current_source != SOURCE_SERIAL:
-                self._fail("A serial port cannot be used with the microphone source.")
+                self._fail("COM-порт нельзя использовать с источником «микрофон».")
                 return
             self._serial_port, self._serial_info = device.device, device
         else:
-            self._fail(f"Unsupported device type: {type(device).__name__}")
+            self._fail(f"Неподдерживаемый тип устройства: {type(device).__name__}")
             return
         self._refresh_label()
 
     # ----------------------------------------------------- service handlers
     def _on_started(self, sample_rate: int) -> None:
         self._sync_state()
-        self._set_status(f"Recording from {self._device_label} at {sample_rate} Hz")
+        self._set_status(f"Запись с устройства «{self._device_label}», {sample_rate} Гц")
         self.recording_started.emit(sample_rate)
 
     def _on_paused(self) -> None:
         self._sync_state()
-        self._set_status("Paused")
+        self._set_status("Пауза")
 
     def _on_resumed(self) -> None:
         self._sync_state()
-        self._set_status("Recording")
+        self._set_status("Запись")
 
     def _on_stopped(self, session: RecordingSession) -> None:
         self._sync_state()
-        self._set_status(f"Saved '{session.title}' ({session.duration_s:.2f} s)")
+        self._set_status(f"Сохранено: «{session.title}» ({session.duration_s:.2f} с)")
         self.recording_stopped.emit(session)
 
     def _on_levels(self, peak_dbfs: float, rms_dbfs: float) -> None:
@@ -390,7 +390,7 @@ class RecordingViewModel(QObject):
 
     def _on_error(self, message: str) -> None:
         self._sync_state()
-        self._set_status(f"Error: {message}")
+        self._set_status(f"Ошибка: {message}")
         self.error_occurred.emit(message)
 
 

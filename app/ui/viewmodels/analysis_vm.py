@@ -261,12 +261,12 @@ class AnalysisViewModel(QObject):
             ValueError: no signal, or fewer than two samples between the bounds.
         """
         if self._data.size == 0 or self._fs <= 0:
-            raise ValueError("No signal loaded.")
+            raise ValueError("Сигнал не загружен.")
         lo, hi = sorted((float(start_s), float(end_s)))
         first = min(self._data.size, max(0, int(round(lo * self._fs))))
         last = min(self._data.size, max(0, int(round(hi * self._fs))))
         if last - first < 2:
-            raise ValueError("The selected segment must contain at least two samples.")
+            raise ValueError("Выделенный фрагмент должен содержать не менее двух отсчётов.")
         self._apply_selection(None if (first, last) == (0, self._data.size) else (first, last))
 
     @Slot()
@@ -314,7 +314,7 @@ class AnalysisViewModel(QObject):
     # ------------------------------------------------------------ requests
     def _require_data(self, kind: str) -> bool:
         if self._data.size == 0 or self._fs <= 0:
-            self.analysis_error.emit(kind, "No signal loaded.")
+            self.analysis_error.emit(kind, "Сигнал не загружен.")
             return False
         return True
 
@@ -397,14 +397,14 @@ class AnalysisViewModel(QObject):
             if not suggested:
                 self.analysis_error.emit(
                     "cwt",
-                    f"CWT needs about {estimate['estimated_mb']:.0f} MB "
-                    f"(budget {estimate['budget_mb']:.0f} MB) and no shorter duration fits.",
+                    f"Для CWT нужно около {estimate['estimated_mb']:.0f} МБ "
+                    f"(лимит {estimate['budget_mb']:.0f} МБ), и более короткий фрагмент тоже не помещается.",
                 )
                 return
             opts["max_seconds"] = max_seconds = float(suggested)
             self.notice.emit(
-                f"CWT limited to the first {suggested:.2f} s to stay within the "
-                f"{estimate['budget_mb']:.0f} MB memory budget."
+                f"CWT ограничен первыми {suggested:.2f} с, чтобы уложиться в "
+                f"лимит памяти {estimate['budget_mb']:.0f} МБ."
             )
         self._request(
             "cwt",
@@ -445,7 +445,7 @@ class AnalysisViewModel(QObject):
         """Time cross-section of the CWT at the scale nearest ``f_hz`` (needs a CWT result)."""
         result = self._cwt
         if result is None:
-            self.analysis_error.emit("wavelet_slice", "Compute the CWT first.")
+            self.analysis_error.emit("wavelet_slice", "Сначала выполните CWT.")
             return
         row = int(np.argmin(np.abs(result.frequencies_hz - f_hz)))
         time_rel, values = longitudinal_slice(result, f_hz)

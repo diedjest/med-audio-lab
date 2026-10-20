@@ -71,8 +71,8 @@ from app.ui.workers.export_worker import ExportWorker
 
 SIDEBAR_WIDTH = 400
 MAX_IMPULSE_ROWS = 500
-_AUDIO_FILE_FILTER = "Audio and data (*.wav *.txt *.csv);;WAV (*.wav);;Text / CSV (*.txt *.csv)"
-_TXT_FILE_FILTER = "Text / CSV (*.txt *.csv);;All files (*)"
+_AUDIO_FILE_FILTER = "Аудио и данные (*.wav *.txt *.csv);;WAV (*.wav);;Текст / CSV (*.txt *.csv)"
+_TXT_FILE_FILTER = "Текст / CSV (*.txt *.csv);;Все файлы (*)"
 _STRONGEST_CHUNK_COLUMNS = 8192
 _IMPULSE_FOCUS_PAD_S = 0.010
 
@@ -86,15 +86,15 @@ QLabel#status[error="true"] { color: #b91c1c; }
 """
 
 _ANALYSIS_BUTTONS: tuple[tuple[str, str], ...] = (
-    ("Waveform", "waveform"),
-    ("FFT", "fft"),
-    ("PSD", "psd"),
-    ("Spectrogram (STFT)", "stft"),
-    ("Wavelet (CWT)", "cwt"),
-    ("Wavelet Slice", "slice"),
-    ("Autocorrelation", "autocorrelation"),
-    ("Envelope", "envelope"),
-    ("Impulses", "impulses"),
+    ("Сигнал", "waveform"),
+    ("БПФ (FFT)", "fft"),
+    ("СПМ (PSD)", "psd"),
+    ("Спектрограмма (STFT)", "stft"),
+    ("Вейвлет (CWT)", "cwt"),
+    ("Срез вейвлета", "slice"),
+    ("Автокорреляция", "autocorrelation"),
+    ("Огибающая", "envelope"),
+    ("Импульсы", "impulses"),
 )
 
 
@@ -125,9 +125,9 @@ def _optional_number(edit: QLineEdit, name: str, *, integer: bool = False) -> fl
     try:
         value = float(text)
     except ValueError:
-        raise ValueError(f"{name} must be a number, got {text!r}") from None
+        raise ValueError(f"{name}: нужно число, получено {text!r}") from None
     if value <= 0:
-        raise ValueError(f"{name} must be positive, got {text}")
+        raise ValueError(f"{name}: число должно быть положительным, получено {text}")
     return int(round(value)) if integer else value
 
 
@@ -153,7 +153,7 @@ class _SliceWindow(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent, Qt.WindowType.Window)
-        self.setWindowTitle("Slice")
+        self.setWindowTitle("Срез")
         self.resize(680, 440)
         self._plot = AnalysisPlot()
         layout = QVBoxLayout(self)
@@ -225,7 +225,7 @@ class AnalysisTab(QWidget):
         self._connect_widgets()
         self._connect_view_model()
         self._refresh_all()
-        self._display.clear("Load a file or record a signal, then choose an analysis")
+        self._display.clear("Загрузите файл или запишите сигнал, затем выберите анализ")
 
     # ====================================================================== UI
     def _build_toolbar(self) -> QVBoxLayout:
@@ -233,20 +233,20 @@ class AnalysisTab(QWidget):
         toolbar.setSpacing(6)
 
         files = QHBoxLayout()
-        self._load_button = QPushButton("Load File")
+        self._load_button = QPushButton("Загрузить файл")
         self._load_button.setObjectName("primary")
         self._txt_button = QPushButton("TXT→WAV")
         files.addWidget(self._load_button)
         files.addWidget(self._txt_button)
         files.addSpacing(16)
 
-        self._target_edit = _number_edit(placeholder="strongest ridge")
-        self._target_edit.setToolTip("Frequency (Hz) of the wavelet slice; empty = the strongest ridge")
-        self._fmin_edit = _number_edit("5000", "default")
-        self._fmin_edit.setToolTip("Lowest frequency (Hz) of the CWT")
-        self._fmax_edit = _number_edit(placeholder="Nyquist")
-        self._fmax_edit.setToolTip("Highest frequency (Hz) of the CWT")
-        for caption, edit in (("Morlet f (Hz)", self._target_edit), ("f from (Hz)", self._fmin_edit), ("f to (Hz)", self._fmax_edit)):
+        self._target_edit = _number_edit(placeholder="самый сильный гребень")
+        self._target_edit.setToolTip("Частота (Гц) среза вейвлета; пусто — самый сильный гребень")
+        self._fmin_edit = _number_edit("5000", "по умолчанию")
+        self._fmin_edit.setToolTip("Наименьшая частота (Гц) CWT")
+        self._fmax_edit = _number_edit(placeholder="Найквист")
+        self._fmax_edit.setToolTip("Наибольшая частота (Гц) CWT")
+        for caption, edit in (("Морле f (Гц)", self._target_edit), ("f от (Гц)", self._fmin_edit), ("f до (Гц)", self._fmax_edit)):
             label = QLabel(caption)
             label.setObjectName("muted")
             files.addWidget(label)
@@ -258,7 +258,7 @@ class AnalysisTab(QWidget):
         self._progress.setMaximumWidth(220)
         self._progress.setTextVisible(True)
         self._progress.hide()
-        self._cancel_button = QPushButton("Cancel")
+        self._cancel_button = QPushButton("Отмена")
         self._cancel_button.hide()
         files.addWidget(self._progress)
         files.addWidget(self._cancel_button)
@@ -279,9 +279,9 @@ class AnalysisTab(QWidget):
         area.setSpacing(4)
 
         head = QHBoxLayout()
-        self._header = ElidedLabel("No signal loaded")
+        self._header = ElidedLabel("Сигнал не загружен")
         self._header.setObjectName("header")
-        self._back_button = QPushButton("◀ Back to CWT")
+        self._back_button = QPushButton("◀ Назад к CWT")
         self._back_button.hide()
         head.addWidget(self._header, 1)
         head.addWidget(self._back_button)
@@ -317,34 +317,34 @@ class AnalysisTab(QWidget):
         return scroll
 
     def _build_segment_group(self) -> QGroupBox:
-        group = QGroupBox("Segment")
+        group = QGroupBox("Фрагмент")
         box = QVBoxLayout(group)
 
         def time_spin() -> QDoubleSpinBox:
             spin = QDoubleSpinBox()
             spin.setDecimals(6)
             spin.setSingleStep(0.01)
-            spin.setSuffix(" s")
+            spin.setSuffix(" с")
             spin.setKeyboardTracking(False)
             return spin
 
         self._segment_start = time_spin()
         self._segment_end = time_spin()
         grid = QGridLayout()
-        grid.addWidget(QLabel("Start"), 0, 0)
+        grid.addWidget(QLabel("Начало"), 0, 0)
         grid.addWidget(self._segment_start, 0, 1)
-        grid.addWidget(QLabel("End"), 1, 0)
+        grid.addWidget(QLabel("Конец"), 1, 0)
         grid.addWidget(self._segment_end, 1, 1)
         box.addLayout(grid)
 
         buttons = QHBoxLayout()
-        self._select_button = QPushButton("Select")
+        self._select_button = QPushButton("Выделить")
         self._select_button.setObjectName("primary")
-        self._select_button.setToolTip("Select a segment: drag its edges on the waveform or type the bounds")
-        self._full_button = QPushButton("Full signal")
-        self._full_button.setToolTip("Analyse the whole signal again")
-        self._save_segment_button = QPushButton("Save segment")
-        self._save_segment_button.setToolTip("Save the selected segment as a WAV file")
+        self._select_button.setToolTip("Выделить фрагмент: перетащите границы на осциллограмме или введите их вручную")
+        self._full_button = QPushButton("Весь сигнал")
+        self._full_button.setToolTip("Снова анализировать весь сигнал")
+        self._save_segment_button = QPushButton("Сохранить фрагмент")
+        self._save_segment_button.setToolTip("Сохранить выделенный фрагмент в WAV-файл")
         buttons.addWidget(self._select_button, 1)
         buttons.addWidget(self._full_button, 1)
         buttons.addWidget(self._save_segment_button, 1)
@@ -355,12 +355,12 @@ class AnalysisTab(QWidget):
         return group
 
     def _build_metrics_group(self) -> QGroupBox:
-        group = QGroupBox("Metrics")
+        group = QGroupBox("Метрики")
         self._metrics_group = group
         box = QVBoxLayout(group)
         self._metrics_tree = QTreeWidget()
         self._metrics_tree.setColumnCount(2)
-        self._metrics_tree.setHeaderLabels(["Parameter", "Value"])
+        self._metrics_tree.setHeaderLabels(["Параметр", "Значение"])
         self._metrics_tree.setRootIsDecorated(False)
         self._metrics_tree.setAlternatingRowColors(True)
         self._metrics_tree.setMinimumHeight(240)
@@ -369,66 +369,66 @@ class AnalysisTab(QWidget):
         return group
 
     def _build_impulse_group(self) -> QGroupBox:
-        group = QGroupBox("Impulse detection")
+        group = QGroupBox("Поиск импульсов")
         box = QVBoxLayout(group)
         grid = QGridLayout()
         defaults = ImpulseDetectorConfig()
         self._threshold_spin = QDoubleSpinBox()
         self._threshold_spin.setRange(-120.0, 0.0)
         self._threshold_spin.setDecimals(1)
-        self._threshold_spin.setSuffix(" dB")
+        self._threshold_spin.setSuffix(" дБ")
         self._threshold_spin.setValue(defaults.threshold_db)
         self._min_duration_spin = QDoubleSpinBox()
         self._min_duration_spin.setRange(0.01, 1000.0)
         self._min_duration_spin.setDecimals(2)
         self._min_duration_spin.setSingleStep(0.1)
-        self._min_duration_spin.setSuffix(" ms")
+        self._min_duration_spin.setSuffix(" мс")
         self._min_duration_spin.setValue(defaults.min_duration_ms)
         self._impulse_fmin_spin = QDoubleSpinBox()
         self._impulse_fmin_spin.setRange(0.0, 400_000.0)
         self._impulse_fmin_spin.setDecimals(0)
         self._impulse_fmin_spin.setSingleStep(500.0)
-        self._impulse_fmin_spin.setSuffix(" Hz")
+        self._impulse_fmin_spin.setSuffix(" Гц")
         self._impulse_fmin_spin.setValue(defaults.fmin_hz)
         for row, (caption, spin) in enumerate(
-            (("Threshold", self._threshold_spin), ("Min duration", self._min_duration_spin), ("Frequency from", self._impulse_fmin_spin))
+            (("Порог", self._threshold_spin), ("Мин. длительность", self._min_duration_spin), ("Частота от", self._impulse_fmin_spin))
         ):
             grid.addWidget(QLabel(caption), row, 0)
             grid.addWidget(spin, row, 1)
         box.addLayout(grid)
 
         buttons = QHBoxLayout()
-        self._detect_button = QPushButton("Detect")
+        self._detect_button = QPushButton("Найти")
         self._detect_button.setObjectName("primary")
-        self._export_impulses_button = QPushButton("Export CSV")
+        self._export_impulses_button = QPushButton("Экспорт в CSV")
         buttons.addWidget(self._detect_button, 1)
         buttons.addWidget(self._export_impulses_button, 1)
         box.addLayout(buttons)
 
         self._impulse_tree = QTreeWidget()
         self._impulse_tree.setColumnCount(5)
-        self._impulse_tree.setHeaderLabels(["#", "Start (s)", "Dur (ms)", "Freq (kHz)", "Peak"])
+        self._impulse_tree.setHeaderLabels(["№", "Начало (с)", "Дл. (мс)", "Част. (кГц)", "Пик"])
         self._impulse_tree.setRootIsDecorated(False)
         self._impulse_tree.setMinimumHeight(170)
         for column, width in enumerate((36, 76, 62, 70, 56)):
             self._impulse_tree.setColumnWidth(column, width)
         box.addWidget(self._impulse_tree)
-        self._impulse_hint = _muted("Double-click an impulse to zoom to it.")
+        self._impulse_hint = _muted("Двойной щелчок по импульсу приближает его.")
         box.addWidget(self._impulse_hint)
         return group
 
     def _build_filter_group(self) -> QGroupBox:
-        group = QGroupBox("Filter")
+        group = QGroupBox("Фильтр")
         form = QFormLayout(group)
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
         self._filter_form = form
 
         self._filter_type = QComboBox()
         for text, kind in (
-            ("Low-pass", FilterType.LOWPASS),
-            ("High-pass", FilterType.HIGHPASS),
-            ("Band-pass", FilterType.BANDPASS),
-            ("Band-stop", FilterType.BANDSTOP),
+            ("ФНЧ (низких частот)", FilterType.LOWPASS),
+            ("ФВЧ (высоких частот)", FilterType.HIGHPASS),
+            ("Полосовой", FilterType.BANDPASS),
+            ("Режекторный", FilterType.BANDSTOP),
         ):
             self._filter_type.addItem(text, kind)
 
@@ -437,7 +437,7 @@ class AnalysisTab(QWidget):
             spin.setRange(1.0, 400_000.0)
             spin.setDecimals(1)
             spin.setSingleStep(500.0)
-            spin.setSuffix(" Hz")
+            spin.setSuffix(" Гц")
             spin.setValue(value)
             return spin
 
@@ -448,29 +448,29 @@ class AnalysisTab(QWidget):
         self._filter_order.setValue(4)
         self._filter_design = QComboBox()
         for text, design in (
-            ("Butterworth", FilterDesign.BUTTERWORTH),
-            ("Chebyshev I", FilterDesign.CHEBYSHEV_I),
-            ("Chebyshev II", FilterDesign.CHEBYSHEV_II),
+            ("Баттерворт", FilterDesign.BUTTERWORTH),
+            ("Чебышев I", FilterDesign.CHEBYSHEV_I),
+            ("Чебышев II", FilterDesign.CHEBYSHEV_II),
         ):
             self._filter_design.addItem(text, design)
         self._filter_ripple = QDoubleSpinBox()
         self._filter_ripple.setRange(0.1, 100.0)
         self._filter_ripple.setDecimals(1)
-        self._filter_ripple.setSuffix(" dB")
+        self._filter_ripple.setSuffix(" дБ")
         self._filter_ripple.setValue(0.5)
-        self._filter_ripple.setToolTip("Passband ripple (Chebyshev I) or stopband attenuation (Chebyshev II)")
+        self._filter_ripple.setToolTip("Пульсации в полосе пропускания (Чебышев I) или затухание в полосе подавления (Чебышев II)")
         self._filter_ripple.setEnabled(False)  # only the Chebyshev designs use it
 
-        form.addRow("Type", self._filter_type)
-        form.addRow("Cutoff", self._filter_low)
-        form.addRow("Upper cutoff", self._filter_high)
-        form.addRow("Order", self._filter_order)
-        form.addRow("Design", self._filter_design)
-        form.addRow("Ripple / attenuation", self._filter_ripple)
+        form.addRow("Тип", self._filter_type)
+        form.addRow("Частота среза", self._filter_low)
+        form.addRow("Верхняя частота среза", self._filter_high)
+        form.addRow("Порядок", self._filter_order)
+        form.addRow("Аппроксимация", self._filter_design)
+        form.addRow("Пульсации / затухание", self._filter_ripple)
         buttons = QHBoxLayout()
-        self._apply_filter_button = QPushButton("Apply")
+        self._apply_filter_button = QPushButton("Применить")
         self._apply_filter_button.setObjectName("primary")
-        self._restore_button = QPushButton("Restore original")
+        self._restore_button = QPushButton("Вернуть оригинал")
         buttons.addWidget(self._apply_filter_button, 1)
         buttons.addWidget(self._restore_button, 1)
         form.addRow(buttons)
@@ -478,20 +478,20 @@ class AnalysisTab(QWidget):
         return group
 
     def _build_cwt_group(self) -> QGroupBox:
-        group = QGroupBox("CWT controls")
+        group = QGroupBox("Параметры CWT")
         form = QFormLayout(group)
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
-        self._target_fs_edit = _number_edit(placeholder="none (keep the sample rate)", integer=True, width=400)
-        self._target_fs_edit.setToolTip("Resample to this rate (Hz) before the CWT")
-        self._max_seconds_edit = _number_edit(placeholder="automatic (fit the memory budget)", width=400)
-        self._max_seconds_edit.setToolTip("Use only the first N seconds of the signal")
+        self._target_fs_edit = _number_edit(placeholder="нет (оставить частоту дискретизации)", integer=True, width=400)
+        self._target_fs_edit.setToolTip("Передискретизировать до этой частоты (Гц) перед CWT")
+        self._max_seconds_edit = _number_edit(placeholder="авто (по лимиту памяти)", width=400)
+        self._max_seconds_edit.setToolTip("Использовать только первые N секунд сигнала")
         self._stride_spin = QSpinBox()
         self._stride_spin.setRange(1, 64)
-        self._stride_spin.setToolTip("Keep every N-th scale: fewer rows, less memory")
-        form.addRow("Target sample rate (Hz)", self._target_fs_edit)
-        form.addRow("Max duration (s)", self._max_seconds_edit)
-        form.addRow("Scale stride", self._stride_spin)
-        form.addRow(_muted("The frequency range is set by 'f from' / 'f to' in the toolbar."))
+        self._stride_spin.setToolTip("Брать каждый N-й масштаб: меньше строк, меньше памяти")
+        form.addRow("Целевая частота дискретизации (Гц)", self._target_fs_edit)
+        form.addRow("Макс. длительность (с)", self._max_seconds_edit)
+        form.addRow("Шаг по масштабам", self._stride_spin)
+        form.addRow(_muted("Диапазон частот задаётся полями «f от» / «f до» на панели сверху."))
         return group
 
     # ================================================================= wiring
@@ -566,15 +566,15 @@ class AnalysisTab(QWidget):
     def _refresh_header(self) -> None:
         vm = self._vm
         if vm.current_data.size == 0:
-            self._header.setText("No signal loaded")
+            self._header.setText("Сигнал не загружен")
             return
         duration = vm.current_data.size / max(1, vm.current_sample_rate)
         name = f"{self._label} - " if self._label else ""
-        filtered = " (filtered)" if vm.has_original else ""
+        filtered = " (отфильтрован)" if vm.has_original else ""
         segment = ""
         if vm.selection is not None:
-            segment = f" - segment {vm.selection[0]:.3f}-{vm.selection[1]:.3f} s"
-        self._header.setText(f"{name}{duration:.3f} s at {vm.current_sample_rate} Hz{filtered}{segment}")
+            segment = f" - фрагмент {vm.selection[0]:.3f}-{vm.selection[1]:.3f} с"
+        self._header.setText(f"{name}{duration:.3f} с, {vm.current_sample_rate} Гц{filtered}{segment}")
 
     def _update_controls(self, *_: object) -> None:
         vm = self._vm
@@ -582,7 +582,7 @@ class AnalysisTab(QWidget):
         for key, button in self._analysis_buttons.items():
             button.setEnabled(has_data and (key != "slice" or vm.cwt_result is not None))
         self._analysis_buttons["slice"].setToolTip(
-            "" if vm.cwt_result is not None else "Compute the CWT first"
+            "" if vm.cwt_result is not None else "Сначала выполните CWT"
         )
         self._detect_button.setEnabled(has_data)
         self._export_impulses_button.setEnabled(bool(vm.current_impulses))
@@ -600,7 +600,7 @@ class AnalysisTab(QWidget):
         self._cancel_button.setVisible(busy)
         if busy:
             self._progress.setValue(0)
-            self._progress.setFormat("Working...")
+            self._progress.setFormat("Выполняется...")
 
     def _on_progress(self, fraction: float, message: str) -> None:
         self._progress.setValue(int(round(min(1.0, max(0.0, fraction)) * 1000)))
@@ -625,14 +625,14 @@ class AnalysisTab(QWidget):
         finally:
             self._updating_segment = False
         if vm.selection is None:
-            self._segment_hint.setText("Analysing the full signal.")
-            self._metrics_group.setTitle("Metrics")
+            self._segment_hint.setText("Анализируется весь сигнал.")
+            self._metrics_group.setTitle("Метрики")
         else:
             self._segment_hint.setText(
-                f"Analysing {end - start:.6f} s of the signal. Times in the analysis plots "
-                "are measured from the segment start."
+                f"Анализируется фрагмент {end - start:.6f} с. Время на графиках анализа "
+                "отсчитывается от начала фрагмента."
             )
-            self._metrics_group.setTitle("Metrics (segment)")
+            self._metrics_group.setTitle("Метрики (фрагмент)")
 
     def select_segment(self, start_s: float | None = None, end_s: float | None = None) -> None:
         """Restrict the analysis to ``[start_s, end_s]`` and show it on the waveform.
@@ -642,7 +642,7 @@ class AnalysisTab(QWidget):
         """
         vm = self._vm
         if vm.current_data.size == 0:
-            self._report("Load or record a signal first.")
+            self._report("Сначала загрузите или запишите сигнал.")
             return
         if self._display.kind != "waveform":
             vm.show_waveform()
@@ -678,9 +678,9 @@ class AnalysisTab(QWidget):
                 self._display.clear_selection()
             else:
                 self._display.set_selection(*selection)
-            self._show_status("Full signal" if selection is None else "Segment selected")
+            self._show_status("Весь сигнал" if selection is None else "Фрагмент выделен")
         elif self._display.kind != "empty":
-            self._show_status("Selection changed - run the analysis again.")
+            self._show_status("Выделение изменилось — запустите анализ заново.")
         self._refresh_header()
         self._refresh_segment()
         self._update_controls()
@@ -694,7 +694,7 @@ class AnalysisTab(QWidget):
         vm = self._vm
         selection = vm.selection
         if selection is None:
-            self._report("There is no selected segment to save. Use 'Select' first.")
+            self._report("Нет выделенного фрагмента для сохранения. Сначала нажмите «Выделить».")
             return
         samples = vm.selected_segment()
         rate = vm.current_sample_rate
@@ -702,7 +702,7 @@ class AnalysisTab(QWidget):
             stem = Path(self._label).stem if self._label else "signal"
             suggested = f"{stem}_{selection[0]:.3f}-{selection[1]:.3f}s.wav"
             chosen, _ = QFileDialog.getSaveFileName(
-                self, "Save segment as WAV", str(self._settings.save_directory / suggested), "WAV (*.wav)"
+                self, "Сохранить фрагмент в WAV", str(self._settings.save_directory / suggested), "WAV (*.wav)"
             )
             if not chosen:
                 return
@@ -715,7 +715,7 @@ class AnalysisTab(QWidget):
             file_io.save_wav(samples, rate, target, subtype)
             return target
 
-        self._run_export(job, "Segment saved: {}")
+        self._run_export(job, "Фрагмент сохранён: {}")
 
     # ================================================================= metrics
     def _refresh_metrics(self) -> None:
@@ -757,9 +757,9 @@ class AnalysisTab(QWidget):
                 item.setTextAlignment(column, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             self._impulse_tree.addTopLevelItem(item)
         if len(impulses) > MAX_IMPULSE_ROWS:
-            self._impulse_hint.setText(f"Showing the first {MAX_IMPULSE_ROWS} of {len(impulses)} impulses.")
+            self._impulse_hint.setText(f"Показаны первые {MAX_IMPULSE_ROWS} из {len(impulses)} импульсов.")
         else:
-            self._impulse_hint.setText("Double-click an impulse to zoom to it.")
+            self._impulse_hint.setText("Двойной щелчок по импульсу приближает его.")
         self._update_controls()
 
     def _on_impulse_activated(self, item: QTreeWidgetItem, _column: int) -> None:
@@ -783,15 +783,15 @@ class AnalysisTab(QWidget):
         """Save the detected impulses as CSV (a save dialog is shown if ``path`` is None)."""
         impulses = list(self._vm.current_impulses)
         if not impulses:
-            self._report("There are no detected impulses to export. Run 'Detect' first.")
+            self._report("Нет найденных импульсов для экспорта. Сначала нажмите «Найти».")
             return
         if path is None:
             stem = Path(self._label).stem if self._label else "impulses"
             chosen, _ = QFileDialog.getSaveFileName(
                 self,
-                "Save detected impulses",
+                "Сохранить найденные импульсы",
                 str(self._settings.save_directory / f"{stem}_impulses.csv"),
-                "CSV (*.csv);;All files (*)",
+                "CSV (*.csv);;Все файлы (*)",
             )
             if not chosen:
                 return
@@ -802,7 +802,7 @@ class AnalysisTab(QWidget):
             file_io.save_impulses_csv(impulses, target)
             return target
 
-        self._run_export(job, "Impulses saved: {}")
+        self._run_export(job, "Импульсы сохранены: {}")
 
     # ================================================================== filter
     def _selected_filter_type(self) -> FilterType:
@@ -817,7 +817,7 @@ class AnalysisTab(QWidget):
         self._filter_form.setRowVisible(self._filter_high, band)
         label = self._filter_form.labelForField(self._filter_low)
         if isinstance(label, QLabel):
-            label.setText("Lower cutoff" if band else "Cutoff")
+            label.setText("Нижняя частота среза" if band else "Частота среза")
 
     def _on_design_changed(self) -> None:
         design = self._selected_design()
@@ -838,9 +838,9 @@ class AnalysisTab(QWidget):
         kind = self._selected_filter_type()
         band = kind in (FilterType.BANDPASS, FilterType.BANDSTOP)
         if nyquist > 0 and max(low, high if band else 0.0) >= nyquist:
-            raise ValueError(f"Cutoff frequencies must be below the Nyquist frequency ({nyquist:.0f} Hz).")
+            raise ValueError(f"Частоты среза должны быть ниже частоты Найквиста ({nyquist:.0f} Гц).")
         if band and high <= low:
-            raise ValueError("The upper cutoff must be above the lower cutoff.")
+            raise ValueError("Верхняя частота среза должна быть выше нижней.")
         return FilterSpec(
             filter_type=kind,
             freq_hz=(low, high) if band else low,
@@ -862,15 +862,15 @@ class AnalysisTab(QWidget):
     def _apply_cwt_options(self) -> bool:
         """Copy the CWT inputs to the view model; False (with a message) if one is invalid."""
         try:
-            fmin = _optional_number(self._fmin_edit, "f from")
-            fmax = _optional_number(self._fmax_edit, "f to")
-            target_fs = _optional_number(self._target_fs_edit, "Target sample rate", integer=True)
-            max_seconds = _optional_number(self._max_seconds_edit, "Max duration")
+            fmin = _optional_number(self._fmin_edit, "f от")
+            fmax = _optional_number(self._fmax_edit, "f до")
+            target_fs = _optional_number(self._target_fs_edit, "Целевая частота дискретизации", integer=True)
+            max_seconds = _optional_number(self._max_seconds_edit, "Макс. длительность")
         except ValueError as exc:
             self._report(str(exc))
             return False
         if fmin is not None and fmax is not None and fmax <= fmin:
-            self._report("'f to' must be above 'f from'.")
+            self._report("«f до» должно быть больше «f от».")
             return False
         stride = self._stride_spin.value()
         self._vm.set_options(
@@ -892,10 +892,10 @@ class AnalysisTab(QWidget):
         """Show the wavelet slice at the 'Morlet f' frequency (the strongest ridge if empty)."""
         result = self._vm.cwt_result
         if result is None:
-            self._vm.show_wavelet_slice(0.0)  # the view model reports "Compute the CWT first."
+            self._vm.show_wavelet_slice(0.0)  # the view model reports "Сначала выполните CWT."
             return
         try:
-            target = _optional_number(self._target_edit, "Morlet f")
+            target = _optional_number(self._target_edit, "Морле f")
         except ValueError as exc:
             self._report(str(exc))
             return
@@ -905,14 +905,14 @@ class AnalysisTab(QWidget):
         if self._last_cwt_payload is not None:
             self._display.show_plot("cwt", self._last_cwt_payload)
             self._back_button.hide()
-            self._show_status("Morlet CWT")
+            self._show_status("Вейвлет-преобразование Морле (CWT)")
 
     # ================================================================ plotting
     def _on_plot_ready(self, kind: str, payload: dict[str, Any]) -> None:
         try:
             self._display.show_plot(kind, payload)
         except Exception as exc:
-            self._report(f"Cannot draw the {kind} plot: {exc}")
+            self._report(f"Не удалось построить график ({kind}): {exc}")
             return
         if kind == "cwt":
             self._last_cwt_payload = payload
@@ -945,13 +945,13 @@ class AnalysisTab(QWidget):
         freqs, values, t_actual, y_label = data
         positive = freqs > 0
         if log_x and not positive.any():
-            self._report("There are no positive frequencies to show on a logarithmic axis.")
+            self._report("Нет положительных частот для логарифмической оси.")
             return
         mask = positive if log_x else np.ones_like(positive)
         self._slice_window_instance().show_slice(
             freqs[mask], values[mask],
-            title=f"Spectrum slice at t = {t_actual:.6f} s ({self._display.title})",
-            x_label="Frequency (Hz)", y_label=y_label, log_x=log_x,
+            title=f"Срез спектра при t = {t_actual:.6f} с ({self._display.title})",
+            x_label="Частота (Гц)", y_label=y_label, log_x=log_x,
         )
 
     def _popup_frequency_slice(self, frequency_hz: float) -> None:
@@ -962,8 +962,8 @@ class AnalysisTab(QWidget):
         time, values, f_actual, y_label = data
         self._slice_window_instance().show_slice(
             time, values,
-            title=f"Time slice at f = {f_actual:.2f} Hz ({self._display.title})",
-            x_label="Time (s)", y_label=y_label,
+            title=f"Срез по времени при f = {f_actual:.2f} Гц ({self._display.title})",
+            x_label="Время (с)", y_label=y_label,
         )
 
     # ================================================================== loading
@@ -984,7 +984,7 @@ class AnalysisTab(QWidget):
         self._label = label
         self._last_cwt_payload = None
         self._back_button.hide()
-        self._display.clear("Loading...")
+        self._display.clear("Загрузка...")
         self._vm.load_signal(samples, sample_rate)
         self._refresh_header()
         self._vm.show_waveform()
@@ -993,7 +993,7 @@ class AnalysisTab(QWidget):
         """Load a WAV / TXT / CSV file (a file dialog is shown if ``path`` is None)."""
         if path is None:
             chosen, _ = QFileDialog.getOpenFileName(
-                self, "Load audio or data file", str(self._settings.save_directory), _AUDIO_FILE_FILTER
+                self, "Загрузить аудио или файл данных", str(self._settings.save_directory), _AUDIO_FILE_FILTER
             )
             if not chosen:
                 return
@@ -1006,7 +1006,7 @@ class AnalysisTab(QWidget):
         self._active_loader = worker
         self._loading = True
         self._update_controls()
-        self._show_status(f"Loading {Path(path).name}...")
+        self._show_status(f"Загрузка {Path(path).name}...")
         worker.start()
 
     @Slot(str, object)
@@ -1026,7 +1026,7 @@ class AnalysisTab(QWidget):
         self._active_loader = None
         self._loading = False
         self._update_controls()
-        self._report(f"Cannot load {name}: {message}")
+        self._report(f"Не удалось загрузить {name}: {message}")
 
     @Slot()
     def _on_worker_finished(self) -> None:
@@ -1049,7 +1049,7 @@ class AnalysisTab(QWidget):
         """
         if input_path is None:
             chosen, _ = QFileDialog.getOpenFileName(
-                self, "Choose a TXT / CSV table", str(self._settings.save_directory), _TXT_FILE_FILTER
+                self, "Выберите таблицу TXT / CSV", str(self._settings.save_directory), _TXT_FILE_FILTER
             )
             if not chosen:
                 return
@@ -1057,14 +1057,14 @@ class AnalysisTab(QWidget):
             if sample_rate is None:
                 rate, ok = QInputDialog.getInt(
                     self, "TXT → WAV",
-                    "Sample rate (Hz).\nCancel to estimate it from the time column:",
+                    "Частота дискретизации (Гц).\nОтмена — оценить её по столбцу времени:",
                     192000, 1, 100_000_000,
                 )
                 sample_rate = rate if ok else None
         source = Path(input_path)
         if output_path is None:
             chosen, _ = QFileDialog.getSaveFileName(
-                self, "Save as WAV", str(source.with_suffix(".wav")), "WAV (*.wav)"
+                self, "Сохранить как WAV", str(source.with_suffix(".wav")), "WAV (*.wav)"
             )
             if not chosen:
                 return
@@ -1075,7 +1075,7 @@ class AnalysisTab(QWidget):
             file_io.txt_to_wav(source, target, sample_rate=sample_rate)
             return target
 
-        self._run_export(job, "Converted to WAV: {}")
+        self._run_export(job, "Преобразовано в WAV: {}")
 
     # ==================================================================== export
     def _run_export(self, job: Callable[[], Path], success: str) -> None:

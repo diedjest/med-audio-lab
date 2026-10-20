@@ -212,12 +212,12 @@ def test_format_metrics_labels_and_units() -> None:
     text = format_metrics(m)
 
     assert list(text) == [
-        "Duration", "Sample rate", "Samples", "RMS", "Peak", "RMS level", "Peak level",
-        "Zero crossing rate", "Dominant frequency", "Spectral centroid", "Spectral bandwidth",
-        "Roll-off 85%", "THD",
+        "Длительность", "Частота дискретизации", "Отсчётов", "СКЗ (RMS)", "Пик", "Уровень СКЗ",
+        "Уровень пика", "Частота пересечений нуля", "Доминирующая частота", "Спектральный центроид",
+        "Ширина полосы", "Срез спектра 85%", "КНИ (THD)",
     ]
-    assert text["Duration"] == "1.500 s"
-    assert text["Sample rate"] == "48000 Hz"
-    assert text["RMS level"] == "-12.0 dBFS"
-    assert text["Dominant frequency"] == "1000.0 Hz"
-    assert text["THD"] == "5.00 %"
+    assert text["Длительность"] == "1.500 с"
+    assert text["Частота дискретизации"] == "48000 Гц"
+    assert text["Уровень СКЗ"] == "-12.0 дБFS"
+    assert text["Доминирующая частота"] == "1000.0 Гц"
+    assert text["КНИ (THD)"] == "5.00 %"

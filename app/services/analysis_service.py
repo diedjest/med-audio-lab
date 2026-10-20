@@ -92,14 +92,14 @@ class _AnalysisWorker(QThread):
             self.progress.emit(request.id, float(min(1.0, max(0.0, fraction))), message)
 
         try:
-            report(0.0, f"Computing {request.kind.value}...")
+            report(0.0, f"Вычисление: {request.kind.value}...")
             result = request.func(report)
             if event.is_set():
                 raise _Cancelled()
-            self.progress.emit(request.id, 1.0, f"{request.kind.value} complete")
+            self.progress.emit(request.id, 1.0, f"Готово: {request.kind.value}")
             self.succeeded.emit(request.id, result)
         except _Cancelled:
-            self.failed.emit(request.id, "Analysis cancelled.")
+            self.failed.emit(request.id, "Анализ отменён.")
         except Exception as exc:  # reported to the UI, never crashes the thread
             self.failed.emit(request.id, str(exc) or type(exc).__name__)
 
@@ -176,7 +176,7 @@ class AnalysisService(QObject):
         kind: AnalysisType,
         func: Callable[[ProgressReporter], object],
     ) -> None:
-        self._retire_current("Analysis cancelled: superseded by a new request.")
+        self._retire_current("Анализ отменён: запущен новый запрос.")
         request = _Request(next(self._ids), kind, func, threading.Event())
         self._current = request
         self.analysis_started.emit(kind.value)
