@@ -227,11 +227,14 @@ class RecordTab(QWidget):
         self._rate_spin = QSpinBox()
         self._rate_spin.setRange(*_CUSTOM_RATE_RANGE)
         self._rate_spin.setValue(88200)
-        self._rate_spin.setSuffix(" Hz")
+        self._rate_spin.setSuffix(" Гц")
         self._rate_spin.hide()
         rate_row.addWidget(self._rate_combo, 1)
         rate_row.addWidget(self._rate_spin, 1)
         rate_form.addRow("Частота дискретизации", rate_row)
+        self._channel_combo = QComboBox()
+        self._channel_combo.setToolTip("Входной канал, который будет записан (запись моно)")
+        rate_form.addRow("Канал", self._channel_combo)
         box.addLayout(rate_form)
         self._mic_info = _muted()
         box.addWidget(self._mic_info)
@@ -365,6 +368,7 @@ class RecordTab(QWidget):
         self._serial_selector.load_failed.connect(lambda m: self._report(f"Не удалось получить список COM-портов: {m}"))
 
         self._rate_combo.activated.connect(self._on_rate_activated)
+        self._channel_combo.activated.connect(self._on_channel_activated)
         self._rate_spin.valueChanged.connect(self._on_custom_rate_changed)
         self._baud_combo.currentTextChanged.connect(self._on_baud_text)
         self._analysis_rate_edit.editingFinished.connect(self._on_analysis_rate_edited)
@@ -394,6 +398,7 @@ class RecordTab(QWidget):
         vm.sample_rate_changed.connect(self._sync_rate)
         vm.baudrate_changed.connect(self._sync_baud)
         vm.serial_analysis_rate_changed.connect(self._sync_analysis_rate)
+        vm.channel_changed.connect(self._sync_channel)
         vm.title_changed.connect(lambda t: self._set_text(self._title_edit, t))
         vm.patient_changed.connect(lambda t: self._set_text(self._patient_edit, t))
         vm.notes_changed.connect(self._sync_notes)
@@ -482,7 +487,50 @@ class RecordTab(QWidget):
         self._vm.on_device_selected(device)
         self._update_device_info(device)
 
+    def _input_channel_count(self, device: Any) -> int:
+        """Input channels of the chosen device (of the system default one for None)."""
+        if isinstance(device, AudioDeviceInfo):
+            return max(1, device.input_channels)
+        try:
+            from app.infrastructure.audio.device_manager import AudioDeviceManager
+
+            default = AudioDeviceManager.default_input_index()
+            for info in AudioDeviceManager.list_input_devices():
+                if info.index == default:
+                    return max(1, info.input_channels)
+        except Exception:
+            pass
+        return 1
+
+    def _fill_channels(self, device: Any) -> None:
+        """List the channels of ``device`` and keep the chosen one if it still exists."""
+        count = self._input_channel_count(device)
+        wanted = min(self._vm.channel, count)
+        self._channel_combo.blockSignals(True)
+        self._channel_combo.clear()
+        for number in range(1, count + 1):
+            self._channel_combo.addItem(f"Канал {number}", number)
+        self._channel_combo.setCurrentIndex(wanted - 1)
+        self._channel_combo.blockSignals(False)
+        if wanted != self._vm.channel:
+            self._vm.channel = wanted
+
+    def _sync_channel(self, channel: int) -> None:
+        index = self._channel_combo.findData(channel)
+        if index >= 0 and index != self._channel_combo.currentIndex():
+            self._channel_combo.blockSignals(True)
+            self._channel_combo.setCurrentIndex(index)
+            self._channel_combo.blockSignals(False)
+
+    @Slot(int)
+    def _on_channel_activated(self, index: int) -> None:
+        number = self._channel_combo.itemData(index)
+        if number is not None:
+            self._vm.channel = int(number)
+
     def _update_device_info(self, device: Any) -> None:
+        if not isinstance(device, SerialPortInfo):
+            self._fill_channels(device)
         if isinstance(device, AudioDeviceInfo):
             self._mic_info.setText(
                 f"входных каналов: {device.input_channels}, по умолчанию {device.default_sample_rate} Гц, "
@@ -554,12 +602,18 @@ class RecordTab(QWidget):
             self._analysis_rate_edit.blockSignals(False)
 
     # ============================================================ save folder
+    def set_calibration(self, volts_per_fs: float) -> None:
+        """Show the live plots in volts (``volts_per_fs`` > 0) or in full-scale units (0)."""
+        self._waveform.set_calibration(volts_per_fs)
+        self._spectrum.set_calibration(volts_per_fs)
+
     def reload_settings(self) -> None:
         """Re-read the persisted settings (after the Settings dialog changed them)."""
         self._dir_edit.setText(str(self._settings.save_directory))
         if self._vm.is_recording:
             return  # the inputs are locked while recording
         self._vm.sample_rate = self._settings.last_sample_rate
+        self._vm.channel = self._settings.last_channel
         self._vm.baudrate = self._settings.last_baudrate
         self._vm.serial_analysis_rate = self._settings.last_serial_analysis_rate
         self._vm.on_source_changed(self._settings.last_source)

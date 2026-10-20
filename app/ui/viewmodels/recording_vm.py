@@ -56,6 +56,7 @@ class RecordingViewModel(QObject):
     patient_changed = Signal(str)
     notes_changed = Signal(str)
     sample_rate_changed = Signal(int)
+    channel_changed = Signal(int)
     baudrate_changed = Signal(int)
     serial_analysis_rate_changed = Signal(int)
 
@@ -92,6 +93,7 @@ class RecordingViewModel(QObject):
         self._serial_port = settings.last_serial_port
         self._serial_info: SerialPortInfo | None = None
         self._sample_rate = settings.last_sample_rate
+        self._channel = settings.last_channel
         self._baudrate = settings.last_baudrate
         self._analysis_rate = settings.last_serial_analysis_rate
         self._device_label = self._compute_label()
@@ -239,6 +241,17 @@ class RecordingViewModel(QObject):
             raise ValueError(f"sample_rate must be positive, got {value}")
         self._set_input("_sample_rate", int(value), self.sample_rate_changed)
 
+    @Property(int, notify=channel_changed)
+    def channel(self) -> int:
+        """Microphone input channel (counted from 1) recorded by the next recording."""
+        return self._channel
+
+    @channel.setter
+    def channel(self, value: int) -> None:
+        if int(value) < 1:
+            raise ValueError(f"channel must be >= 1, got {value}")
+        self._set_input("_channel", int(value), self.channel_changed)
+
     @Property(int, notify=baudrate_changed)
     def baudrate(self) -> int:
         """Serial baud rate used by the next serial recording."""
@@ -274,7 +287,7 @@ class RecordingViewModel(QObject):
                 return
             self._service.start_serial(self._serial_port, self._baudrate, self._analysis_rate)
         else:
-            self._service.start_audio(self._device_index, self._sample_rate)
+            self._service.start_audio(self._device_index, self._sample_rate, self._channel)
         # state changes arrive through the service signals; failures through error_occurred
 
     @Slot()
@@ -369,7 +382,8 @@ class RecordingViewModel(QObject):
     # ----------------------------------------------------- service handlers
     def _on_started(self, sample_rate: int) -> None:
         self._sync_state()
-        self._set_status(f"Запись с устройства «{self._device_label}», {sample_rate} Гц")
+        channel = f", канал {self._channel}" if self._current_source == SOURCE_MICROPHONE else ""
+        self._set_status(f"Запись с устройства «{self._device_label}»{channel}, {sample_rate} Гц")
         self.recording_started.emit(sample_rate)
 
     def _on_paused(self) -> None:

@@ -71,6 +71,7 @@ class CaptureEngine(IAudioCaptureEngine):
         self._lost = False
         self._sample_rate = 44100
         self._channels = 1
+        self._channel: int | None = None  # input channel to record; None = all
         self._overflow_count = 0
         self._reported_dropped = 0
 
@@ -131,7 +132,8 @@ class CaptureEngine(IAudioCaptureEngine):
             self._overflow_count += 1
         if self._paused:
             return
-        self._ring.write(indata)
+        channel = self._channel
+        self._ring.write(indata if channel is None else indata[:, channel])
 
     # ------------------------------------------------------------- control
     def start(
@@ -141,6 +143,7 @@ class CaptureEngine(IAudioCaptureEngine):
         channels: int = 1,
         dtype: str = "float32",
         block_size: int = DEFAULT_BLOCK_SIZE,
+        channel: int | None = None,
     ) -> None:
         """Open the input stream and begin capturing.
 
@@ -151,6 +154,9 @@ class CaptureEngine(IAudioCaptureEngine):
             dtype: Sample format delivered by PortAudio. The ring buffer stores
                 normalized float32, so only ``"float32"`` is accepted.
             block_size: Frames per callback.
+            channel: Zero-based index of the one input channel to record (the stream
+                is opened with at least ``channel + 1`` channels and the recording is
+                mono).  None records all ``channels`` channels.
 
         Raises:
             AudioUnavailableError: sounddevice / PortAudio is not available.
@@ -167,13 +173,18 @@ class CaptureEngine(IAudioCaptureEngine):
             raise ValueError(f"channels must be >= 1, got {channels}")
         if block_size < 0:
             raise ValueError(f"block_size must be >= 0, got {block_size}")
+        if channel is not None:
+            if channel < 0:
+                raise ValueError(f"channel must be >= 0, got {channel}")
+            channels = max(channels, channel + 1)
+        stored_channels = 1 if channel is not None else channels
 
         with self._state_lock:
             if self._recording:
                 raise AudioCaptureError("Запись уже идёт.")
 
-            if self._ring.channels != channels:
-                self._ring = RingBuffer(RING_BUFFER_CAPACITY, np.float32, channels=channels)
+            if self._ring.channels != stored_channels:
+                self._ring = RingBuffer(RING_BUFFER_CAPACITY, np.float32, channels=stored_channels)
             else:
                 self._ring.reset()
             with self._chunks_lock:
@@ -185,7 +196,8 @@ class CaptureEngine(IAudioCaptureEngine):
             self._last_error = None
             self._overflow_count = 0
             self._reported_dropped = 0
-            self._channels = int(channels)
+            self._channels = int(stored_channels)
+            self._channel = None if channel is None else int(channel)
 
             if device_index is None:
                 device_index = AudioDeviceManager.default_input_index()

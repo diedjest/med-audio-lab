@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
@@ -58,6 +59,17 @@ class SettingsDialog(QDialog):
         for key, text in _BIT_DEPTHS:
             self._bit_depth.addItem(text, key)
         self._bit_depth.setCurrentIndex(max(0, self._bit_depth.findData(settings.wav_bit_depth)))
+        self._calibration = QDoubleSpinBox()
+        self._calibration.setDecimals(6)
+        self._calibration.setRange(0.0, 1_000_000.0)
+        self._calibration.setSingleStep(0.1)
+        self._calibration.setSuffix(" В")
+        self._calibration.setSpecialValueText("не задана")
+        self._calibration.setValue(settings.calibration_v_per_fs)
+        self._calibration.setToolTip(
+            "Сколько вольт соответствует амплитуде 1,0 (полной шкале). "
+            "Если задано, амплитуда на графиках показывается в вольтах."
+        )
         self._sample_rate = _spin(1000, 768_000, settings.last_sample_rate, " Гц")
         self._baud = _spin(1, 100_000_000, settings.last_baudrate, " бод")
         self._analysis_rate = _spin(1, 100_000_000, settings.last_serial_analysis_rate, " Гц")
@@ -66,6 +78,7 @@ class SettingsDialog(QDialog):
         form.addRow("Папка для записей", dir_row)
         form.addRow("Разрядность WAV", self._bit_depth)
         form.addRow("Источник по умолчанию", self._source)
+        form.addRow("Калибровка (В на полную шкалу)", self._calibration)
         form.addRow("Частота дискретизации микрофона", self._sample_rate)
         form.addRow("Скорость COM-порта", self._baud)
         form.addRow("Частота анализа данных COM-порта", self._analysis_rate)
@@ -101,6 +114,10 @@ class SettingsDialog(QDialog):
         return self._bit_depth
 
     @property
+    def calibration_spin(self) -> QDoubleSpinBox:
+        return self._calibration
+
+    @property
     def sample_rate_spin(self) -> QSpinBox:
         return self._sample_rate
 
@@ -130,6 +147,7 @@ class SettingsDialog(QDialog):
         self._settings.save_directory = Path(text)
         self._settings.wav_bit_depth = str(self._bit_depth.currentData())
         self._settings.last_source = str(self._source.currentData())
+        self._settings.calibration_v_per_fs = self._calibration.value()
         self._settings.last_sample_rate = self._sample_rate.value()
         self._settings.last_baudrate = self._baud.value()
         self._settings.last_serial_analysis_rate = self._analysis_rate.value()

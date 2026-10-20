@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 from app.core.interfaces.storage_repository import IStorageRepository
@@ -11,12 +12,14 @@ from app.core.interfaces.storage_repository import IStorageRepository
 KEY_SAVE_DIR = "save_dir"
 KEY_LAST_DEVICE_INDEX = "last_device_index"
 KEY_LAST_SAMPLE_RATE = "last_sample_rate"
+KEY_LAST_CHANNEL = "last_channel"
 KEY_LAST_SERIAL_PORT = "last_serial_port"
 KEY_LAST_BAUDRATE = "last_baudrate"
 KEY_LAST_SERIAL_ANALYSIS_RATE = "last_serial_analysis_rate"
 KEY_LAST_SOURCE = "last_source"
 KEY_WINDOW_GEOMETRY = "window_geometry"
 KEY_WAV_BIT_DEPTH = "wav_bit_depth"
+KEY_CALIBRATION_V_PER_FS = "calibration_v_per_fs"
 
 DEFAULT_WAV_BIT_DEPTH = "PCM_24"
 VALID_WAV_BIT_DEPTHS: tuple[str, ...] = ("PCM_16", "PCM_24", "FLOAT_32")
@@ -83,6 +86,23 @@ class SettingsService:
             raise ValueError(f"wav_bit_depth must be one of {VALID_WAV_BIT_DEPTHS}, got {value!r}")
         self._repository.set_setting(KEY_WAV_BIT_DEPTH, value)
 
+    @property
+    def calibration_v_per_fs(self) -> float:
+        """Volts that correspond to a full-scale amplitude of 1.0; 0.0 means "not calibrated"."""
+        raw = self._repository.get_setting(KEY_CALIBRATION_V_PER_FS, "")
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            return 0.0
+        return value if math.isfinite(value) and value > 0.0 else 0.0
+
+    @calibration_v_per_fs.setter
+    def calibration_v_per_fs(self, value: float) -> None:
+        value = float(value)
+        if not math.isfinite(value) or value < 0.0:
+            raise ValueError(f"calibration_v_per_fs must be >= 0, got {value}")
+        self._repository.set_setting(KEY_CALIBRATION_V_PER_FS, repr(value))
+
     # ------------------------------------------------------------- devices
     @property
     def last_device_index(self) -> int | None:
@@ -102,6 +122,15 @@ class SettingsService:
         if int(value) < 0:
             raise ValueError(f"last_device_index must be >= 0 or None, got {value}")
         self._repository.set_setting(KEY_LAST_DEVICE_INDEX, str(int(value)))
+
+    @property
+    def last_channel(self) -> int:
+        """Last used microphone input channel, counted from 1."""
+        return self._get_positive_int(KEY_LAST_CHANNEL, 1)
+
+    @last_channel.setter
+    def last_channel(self, value: int) -> None:
+        self._set_positive_int(KEY_LAST_CHANNEL, value, "last_channel")
 
     @property
     def last_sample_rate(self) -> int:

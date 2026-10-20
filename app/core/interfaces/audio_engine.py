@@ -24,8 +24,11 @@ class IAudioCaptureEngine(ABC):
         channels: int = 1,
         dtype: str = "float32",
         block_size: int = 1024,
+        channel: int | None = None,
     ) -> None:
-        """Start recording from the specified audio input device."""
+        """Start recording from the specified audio input device.
+
+        ``channel`` is the zero-based input channel to record (mono); None records all."""
         ...
 
     @abstractmethod

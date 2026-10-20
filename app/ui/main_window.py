@@ -233,6 +233,7 @@ class MainWindow(QMainWindow):
         self._build_status_bar()
         self._connect()
         self._restore_geometry()
+        self._apply_calibration()
         self._ctx.library_vm.refresh()  # the Library tab is hidden at startup; load it now
         self._refresh_state()
         self.statusBar().showMessage("Готово", _INFO_MESSAGE_MS)
@@ -513,7 +514,14 @@ class MainWindow(QMainWindow):
         dialog = self._settings_dialog_factory(self._ctx.settings, self)
         if dialog.exec():
             self._record_tab.reload_settings()
+            self._apply_calibration()
             self._show_info("Настройки сохранены.")
+
+    def _apply_calibration(self) -> None:
+        """Pass the calibration coefficient (volts per full scale) to the tabs."""
+        volts = self._ctx.settings.calibration_v_per_fs
+        self._record_tab.set_calibration(volts)
+        self._analysis_tab.set_calibration(volts)
 
     def about_text(self) -> str:
         """The text of the About box."""

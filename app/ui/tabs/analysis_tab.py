@@ -64,6 +64,7 @@ from app.core.models.impulse import DetectedImpulse, ImpulseDetectorConfig
 from app.infrastructure.storage import file_io
 from app.services.settings_service import SettingsService
 from app.ui.viewmodels.analysis_vm import AnalysisViewModel
+from app.ui.widgets._plot_base import format_volts
 from app.ui.widgets.elided_label import ElidedLabel
 from app.ui.widgets.spectrogram_widget import AnalysisPlot, SpectrogramWidget
 from app.ui.workers.analysis_worker import AnalysisWorker
@@ -209,6 +210,7 @@ class AnalysisTab(QWidget):
         self._workers: set[Any] = set()
         self._loading = False
         self._updating_segment = False
+        self._volts_per_fs = 0.0
 
         self.setStyleSheet(_STYLE)
         root = QVBoxLayout(self)
@@ -718,6 +720,12 @@ class AnalysisTab(QWidget):
         self._run_export(job, "Фрагмент сохранён: {}")
 
     # ================================================================= metrics
+    def set_calibration(self, volts_per_fs: float) -> None:
+        """Show amplitudes in volts (``volts_per_fs`` > 0) or in full-scale units (0)."""
+        self._volts_per_fs = max(0.0, float(volts_per_fs))
+        self._display.set_calibration(self._volts_per_fs)
+        self._refresh_metrics()
+
     def _refresh_metrics(self) -> None:
         self._metrics_tree.clear()
         metrics: SignalMetrics | None = self._vm.current_metrics
@@ -726,6 +734,11 @@ class AnalysisTab(QWidget):
         rows = format_metrics(metrics).items()
         for name, value in rows:
             self._metrics_tree.addTopLevelItem(QTreeWidgetItem([name, value]))
+        if self._volts_per_fs > 0.0:
+            for name, level in (("Пик (В)", metrics.peak), ("СКЗ (В)", metrics.rms)):
+                self._metrics_tree.addTopLevelItem(
+                    QTreeWidgetItem([name, format_volts(level * self._volts_per_fs)])
+                )
 
     # ================================================================ impulses
     def detect_impulses(self) -> None:

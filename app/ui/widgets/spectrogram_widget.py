@@ -443,7 +443,13 @@ class SpectrogramWidget(QWidget):
         self._kind = "empty"
         self._title = ""
         self._plot.clicked.connect(self.clicked)
+        self._volts_per_fs = 0.0
         self.clear("Загрузите или запишите сигнал, затем выберите анализ")
+
+    def set_calibration(self, volts_per_fs: float) -> None:
+        """Show amplitudes in volts (``volts_per_fs`` > 0); applies to plots drawn from now on."""
+        self._volts_per_fs = max(0.0, float(volts_per_fs))
+        self._waveform.set_calibration(self._volts_per_fs)
 
     # ------------------------------------------------------------- access
     @property
@@ -566,12 +572,18 @@ class SpectrogramWidget(QWidget):
 
     def _show_fft(self, payload: dict[str, Any]) -> None:
         freqs, mags = payload["freqs_hz"], payload["magnitudes"]
+        volts = self._volts_per_fs
+        if volts > 0.0:
+            mags = np.asarray(mags, dtype=np.float64) * volts
+            peak_magnitude = float(payload["peak_magnitude"]) * volts
+        else:
+            peak_magnitude = payload["peak_magnitude"]
         peak_hz = payload.get("peak_hz", 0.0)
         annotations = (
-            [{"x": peak_hz, "y": payload["peak_magnitude"], "label": f"{peak_hz:.1f} Гц"}] if peak_hz else []
+            [{"x": peak_hz, "y": peak_magnitude, "label": f"{peak_hz:.1f} Гц"}] if peak_hz else []
         )
         self._xy(
-            "Спектр (БПФ)", freqs, mags, x_label="Частота (Гц)", y_label="Магнитуда",
+            "Спектр (БПФ)", freqs, mags, x_label="Частота (Гц)", y_label="Магнитуда (В)" if volts > 0.0 else "Магнитуда",
             color=COLOR_WAVEFORM, annotations=annotations,
             note=f"Пик: {peak_hz:.1f} Гц" if peak_hz else "",
         )

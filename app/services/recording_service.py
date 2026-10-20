@@ -170,8 +170,10 @@ class RecordingService(QObject):
             self.error_occurred.emit(f"Не удалось сохранить настройки: {exc}")
 
     # -------------------------------------------------------------- start
-    def start_audio(self, device_index: int | None, sample_rate: int) -> bool:
+    def start_audio(self, device_index: int | None, sample_rate: int, channel: int = 1) -> bool:
         """Start microphone capture and live monitoring.
+
+        ``channel`` is the input channel to record, counted from 1; the recording is mono.
 
         Returns:
             True if capture started; otherwise False with ``error_occurred`` emitted.
@@ -179,7 +181,9 @@ class RecordingService(QObject):
         if not self._can_start():
             return False
         try:
-            self._audio.start(device_index, int(sample_rate), 1, "float32", DEFAULT_BLOCK_SIZE)
+            self._audio.start(
+                device_index, int(sample_rate), 1, "float32", DEFAULT_BLOCK_SIZE, channel=max(1, int(channel)) - 1
+            )
         except Exception as exc:
             self.error_occurred.emit(f"Не удалось начать запись звука: {exc}")
             return False
@@ -188,6 +192,7 @@ class RecordingService(QObject):
             last_source=SOURCE_MICROPHONE,
             last_device_index=device_index,
             last_sample_rate=int(sample_rate),
+            last_channel=max(1, int(channel)),
         )
         self._serial_context = ""
         self._begin(self._audio, SOURCE_MICROPHONE, int(self._audio.sample_rate) or int(sample_rate))

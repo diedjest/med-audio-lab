@@ -9,7 +9,7 @@ import pyqtgraph as pg
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
 
-from app.ui.widgets._plot_base import COLOR_PEAK, COLOR_SPECTRUM, PlotWidgetBase, finite_float32, nearest_index
+from app.ui.widgets._plot_base import COLOR_PEAK, COLOR_SPECTRUM, PlotWidgetBase, finite_float32, format_volts, nearest_index
 
 _TEXT_Y_FRACTION = 0.96  # height of the peak label as a fraction of the y range
 _Y_HEADROOM = 1.15
@@ -123,12 +123,16 @@ class SpectrumWidget(PlotWidgetBase):
         self._vb.setYRange(0.0, 1.0, padding=0)
         self._show_placeholder(message)
 
+    def _apply_calibration(self) -> None:
+        self._set_amplitude_axis("Магнитуда")
+
     # --------------------------------------------------------------- hover
     def _hover_text(self, x: float, y: float) -> str | None:
         if self._khz is None or self._mags is None:
             return None
         i = nearest_index(self._khz, x)
-        return f"Частота: {self._khz[i]:.3f} кГц\nМагнитуда: {self._mags[i]:.4g}"
+        magnitude = format_volts(float(self._mags[i]) * self.volts_per_fs) if self.volts_per_fs else f"{self._mags[i]:.4g}"
+        return f"Частота: {self._khz[i]:.3f} кГц\nМагнитуда: {magnitude}"
 
 
 __all__: list[str] = ["SpectrumWidget"]

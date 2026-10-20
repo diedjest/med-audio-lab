@@ -406,22 +406,25 @@ class WaveformWidget(PlotWidgetBase):
         self._vb.setXRange(0.0, 1.0, padding=0)
         self._show_placeholder(message)
 
+    def _apply_calibration(self) -> None:
+        self._set_amplitude_axis("Амплитуда")
+
     # --------------------------------------------------------------- hover
     def _hover_text(self, x: float, y: float) -> str | None:
         if self._mode == "static" and self._y is not None:
             if not 0.0 <= x <= self._y.size / self._sr:
                 return None
             i = min(int(round(x * self._sr)), self._y.size - 1)
-            lines = [f"Время: {i / self._sr:.6f} с", f"Амплитуда: {self._y[i]:+.5f}"]
+            lines = [f"Время: {i / self._sr:.6f} с", f"Амплитуда: {self._amplitude_text(self._y[i])}"]
             if self._ov_y is not None and i < self._ov_y.size:
-                lines.append(f"Огибающая: {self._ov_y[i]:+.5f}")
+                lines.append(f"Огибающая: {self._amplitude_text(self._ov_y[i])}")
             return "\n".join(lines)
         if self._mode == "live":
             xs, ys = self._curve.getData()
             if xs is None or xs.size == 0:
                 return None
             i = nearest_index(xs, x)
-            return f"Время: {xs[i]:.4f} с\nАмплитуда: {ys[i]:+.5f}"
+            return f"Время: {xs[i]:.4f} с\nАмплитуда: {self._amplitude_text(ys[i])}"
         return None
 
     # -------------------------------------------------- zoom / export / menu

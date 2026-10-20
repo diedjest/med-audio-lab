@@ -29,6 +29,15 @@ def finite_float32(data: object) -> np.ndarray:
     return arr
 
 
+def format_volts(volts: float) -> str:
+    """``0.0123 -> "12.3 мВ"``: volts with an SI prefix that keeps 1..999 in front."""
+    magnitude = abs(volts)
+    for factor, unit in ((1.0, "В"), (1e-3, "мВ"), (1e-6, "мкВ")):
+        if magnitude >= factor:
+            return f"{volts / factor:.4g} {unit}"
+    return f"{volts / 1e-6:.4g} мкВ"
+
+
 def nearest_index(xs: np.ndarray, x: float) -> int:
     """Index of the element of the ascending array ``xs`` closest to ``x``."""
     i = int(np.searchsorted(xs, x))
@@ -98,6 +107,7 @@ class PlotWidgetBase(QWidget):
         item.addItem(self._hover_line, ignoreBounds=True)
         self._hover_line.hide()
         self._plot.scene().sigMouseMoved.connect(self._on_hover_moved)
+        self._volts_per_fs = 0.0
 
     @property
     def plot_widget(self) -> pg.PlotWidget:
@@ -116,6 +126,38 @@ class PlotWidgetBase(QWidget):
 
     def _hide_placeholder(self) -> None:
         self._placeholder.hide()
+
+    # --------------------------------------------------------- calibration
+    @property
+    def volts_per_fs(self) -> float:
+        """Volts per full-scale amplitude of 1.0; 0.0 while the plot is not calibrated."""
+        return self._volts_per_fs
+
+    def set_calibration(self, volts_per_fs: float) -> None:
+        """Show amplitudes in volts (``volts_per_fs`` > 0) or in full-scale units (0)."""
+        value = float(volts_per_fs)
+        self._volts_per_fs = value if value > 0.0 else 0.0
+        self._apply_calibration()
+
+    def _apply_calibration(self) -> None:
+        """Hook: update the axes after :meth:`set_calibration`."""
+
+    def _set_amplitude_axis(self, name: str) -> None:
+        """Label the left axis ``name`` and scale its ticks to volts when calibrated."""
+        item = self._plot.getPlotItem()
+        axis = item.getAxis("left")
+        if self._volts_per_fs > 0.0:
+            axis.setScale(self._volts_per_fs)
+            item.setLabel("left", name, units="В", color=COLOR_AXIS)
+        else:
+            axis.setScale(1.0)
+            item.setLabel("left", name, units=None, color=COLOR_AXIS)
+
+    def _amplitude_text(self, value: float) -> str:
+        """``value`` (full-scale units) as text: volts when calibrated."""
+        if self._volts_per_fs > 0.0:
+            return format_volts(value * self._volts_per_fs)
+        return f"{value:+.5f}"
 
     # --------------------------------------------------------------- hover
     @property
@@ -165,6 +207,7 @@ __all__: list[str] = [
     "PlotWidgetBase",
     "finite_float32",
     "nearest_index",
+    "format_volts",
     "COLOR_WAVEFORM",
     "COLOR_SPECTRUM",
     "COLOR_PEAK",
