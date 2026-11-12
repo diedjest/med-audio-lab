@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "medaudiolab"
+version = "2.0.0"
+description = "High-frequency audio and ultrasonic signal analysis workstation"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "MedAudioLab Team" },
+]
+dependencies = [
+    "PySide6>=6.6,<7",
+    "pyqtgraph>=0.13",
+    "matplotlib>=3.8",
+    "numpy>=1.26",
+    "scipy>=1.12",
+    "sounddevice>=0.5",
+    "soundfile>=0.12",
+    "pyserial>=3.5",
+]
+
+[project.scripts]
+medaudiolab = "run:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

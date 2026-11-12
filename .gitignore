@@ -31,6 +31,7 @@ MANIFEST
 #   before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
+!medaudiolab.spec
 
 # Installer logs
 pip-log.txt
@@ -218,3 +219,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+*.zip
+# Internal architecture notes
+project_architecture.md
+
+tests/data/records
